@@ -1,0 +1,4 @@
+(executable
+ (public_name diffusers_ocaml)
+ (name main)
+ (libraries diffusers_ocaml))
