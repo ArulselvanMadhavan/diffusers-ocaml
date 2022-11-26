@@ -10,7 +10,7 @@ type resnet_block_2dconfig =
   ; output_scale_factor : float
   }
 
-let make () =
+let make_config () =
   { out_channels = None
   ; temb_channels = Some 512
   ; groups = 32
@@ -21,15 +21,26 @@ let make () =
   }
 ;;
 
-type t =
-  { norm1 : Torch.Nn.t
-  ; norm2 : Torch.Nn.t
-  ; conv1 : Torch.Nn.t
-  ; conv2 : Torch.Nn.t
-  ; time_emb_proj : Torch.Nn.t option
-  ; conv_shortcut : Torch.Nn.t option
-  ; config : resnet_block_2dconfig
-  }
+(* type t = *)
+(*   { norm1 : Torch.Nn.t *)
+(*   ; norm2 : Torch.Nn.t *)
+(*   ; conv1 : Torch.Nn.t *)
+(*   ; conv2 : Torch.Nn.t *)
+(*   ; time_emb_proj : Torch.Nn.t option *)
+(*   ; conv_shortcut : Torch.Nn.t option *)
+(*   ; config : resnet_block_2dconfig *)
+(*   } *)
 
-    (* pub fn new(vs: nn::Path, in_channels: i64, config: ResnetBlock2DConfig) -> Self { *)
+type t = int
 
+let make (_vs : Var_store.t) in_channels config =
+  let out_channels = Option.value config.out_channels ~default:in_channels in
+  print_int out_channels;
+  print_int (Option.value config.temb_channels ~default:0);
+  print_int config.groups;
+  print_int (Option.value config.groups_out ~default:0);
+  print_float config.eps;
+  let _ = Option.value config.use_in_shortcut ~default:true in
+  print_float config.output_scale_factor
+;;
+(* pub fn new(vs: nn::Path, in_channels: i64, config: ResnetBlock2DConfig) -> Self { *)
