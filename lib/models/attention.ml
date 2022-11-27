@@ -149,12 +149,64 @@ module CrossAttention = struct
     let query = reshape_heads_to_batch_dim t query in
     let key = reshape_heads_to_batch_dim t key in
     let value = reshape_heads_to_batch_dim t value in
-    Option.fold ~none:(attention t query key value) ~some:(fun slice_size ->
-      if List.hd (Tensor.size query) / slice_size <= 1
-      then attention t query key value
-      else
-        Layer.forward
-          t.to_out
-          (sliced_attention t query key value sequence_length dim slice_size))
+    Option.fold
+      ~none:(attention t query key value)
+      ~some:(fun slice_size ->
+        if List.hd (Tensor.size query) / slice_size <= 1
+        then attention t query key value
+        else
+          Layer.forward
+            t.to_out
+            (sliced_attention t query key value sequence_length dim slice_size))
+      t.slice_size
+  ;;
+end
+
+module BasicTransformerBlock = struct
+  type t =
+    { attn1 : CrossAttention.t
+    ; attn2 : CrossAttention.t
+    ; ff : Feedforward.t
+    ; norm1 : Nn.t
+    ; norm2 : Nn.t
+    ; norm3 : Nn.t
+    }
+
+  let make vs dim n_heads d_head context_dim sliced_attention_size =
+    let attn1 =
+      CrossAttention.make
+        Var_store.(vs / "attn1")
+        dim
+        None
+        n_heads
+        d_head
+        sliced_attention_size
+    in
+    let ff = Feedforward.make Var_store.(vs / "ff") dim None 4 in
+    let attn2 =
+      CrossAttention.make
+        Var_store.(vs / "attn2")
+        dim
+        context_dim
+        n_heads
+        d_head
+        sliced_attention_size
+    in
+    let norm1 = Nn.layer_norm Var_store.(vs / "norm1") dim in
+    let norm2 = Nn.layer_norm Var_store.(vs / "norm2") dim in
+    let norm3 = Nn.layer_norm Var_store.(vs / "norm3") dim in
+    { attn1; attn2; ff; norm1; norm2; norm3 }
+  ;;
+
+  let forward t xs context =
+    let xs1 = Layer.forward t.norm1 xs in
+    let xs1 = CrossAttention.forward t.attn1 xs1 None in
+    let xs = Tensor.add xs1 xs in
+    let xs1 = Layer.forward t.norm2 xs in
+    let xs1 = CrossAttention.forward t.attn2 xs1 context in
+    let xs = Tensor.add xs1 xs in
+    let xs1 = Layer.forward t.norm3 xs in
+    let xs1 = Feedforward.forward t.ff xs1 in
+    Tensor.add xs1 xs
   ;;
 end
