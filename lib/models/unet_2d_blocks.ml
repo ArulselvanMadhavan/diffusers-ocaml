@@ -104,9 +104,40 @@ module DownEncoderBlock2D = struct
   type t =
     { resnets : Resnet.ResnetBlock2D.t list
     ; downsampler : Downsample2D.t option
+    ; config : DownEncoderBlock2DConfig.t
     }
 
-  (* let make vs in_channels out_channels (config: DownEncoderBlock2DConfig.t) = *)
-  (*     let vs = Var_store.(vs / "resnets") in *)
-  (*     let cfg = Resnet.ResnetBlock2DConfig.default () in *)
+  let make vs in_channels out_channels (config : DownEncoderBlock2DConfig.t) =
+    let resnets =
+      let vs = Var_store.(vs / "resnets") in
+      let cfg = Resnet.ResnetBlock2DConfig.default () in
+      let cfg =
+        { cfg with
+          out_channels = Some out_channels
+        ; eps = config.resnet_eps
+        ; groups = config.resnet_groups
+        ; output_scale_factor = config.output_scale_factor
+        ; temb_channels = None
+        }
+      in
+      List.init config.num_layers (fun i ->
+        let in_channels = if i == 0 then in_channels else out_channels in
+        Resnet.ResnetBlock2D.make Var_store.(vs // i) in_channels cfg)
+    in
+    let downsampler =
+      if config.add_downsample
+      then (
+        let downsample =
+          Downsample2D.make
+            Var_store.(vs / "downsamplers" // 0)
+            out_channels
+            true
+            out_channels
+            config.downsample_padding
+        in
+        Some downsample)
+      else None
+    in
+    { resnets; downsampler; config }
+  ;;
 end

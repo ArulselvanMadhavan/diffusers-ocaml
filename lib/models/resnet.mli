@@ -1,7 +1,15 @@
 open Torch
 
 module ResnetBlock2DConfig : sig
-  type t
+  type t =
+    { out_channels : int option
+    ; temb_channels : int option
+    ; groups : int
+    ; groups_out : int option
+    ; eps : float
+    ; use_in_shortcut : bool option
+    ; output_scale_factor : float
+    }
 
   val default : unit -> t
 end
