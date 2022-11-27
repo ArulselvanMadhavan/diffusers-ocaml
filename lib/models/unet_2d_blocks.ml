@@ -140,4 +140,71 @@ module DownEncoderBlock2D = struct
     in
     { resnets; downsampler; config }
   ;;
+
+  let forward t xs =
+    let xs =
+      Base.List.fold t.resnets ~init:xs ~f:(fun acc r ->
+        Resnet.ResnetBlock2D.forward r acc None)
+    in
+    Base.Option.fold t.downsampler ~init:xs ~f:(fun acc downsampler ->
+      Downsample2D.forward downsampler acc)
+  ;;
+end
+
+module UpDecoderBlock2DConfig = struct
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int
+    ; output_scale_factor : float
+    ; add_upsample : bool
+    }
+
+  let default () =
+    { num_layers = 1
+    ; resnet_eps = 1e-6
+    ; resnet_groups = 32
+    ; output_scale_factor = 1.
+    ; add_upsample = true
+    }
+  ;;
+end
+
+module UpDecoderBlock2D = struct
+  type t =
+    { resnets : Resnet.ResnetBlock2D.t list
+    ; upsampler : Upsample2D.t option
+    ; config : UpDecoderBlock2DConfig.t
+    }
+
+  (*   vs: nn::Path, *)
+  (* in_channels: i64, *)
+  (* out_channels: i64, *)
+  (* config: UpDecoderBlock2DConfig, *)
+  let make vs in_channels out_channels (config : UpDecoderBlock2DConfig.t) =
+    let resnets =
+      let vs = Var_store.(vs / "resnets") in
+      let cfg = Resnet.ResnetBlock2DConfig.default () in
+      let cfg =
+        { cfg with
+          out_channels = Some out_channels
+        ; eps = config.resnet_eps
+        ; groups = config.resnet_groups
+        ; output_scale_factor = config.output_scale_factor
+        ; temb_channels = None
+        }
+      in
+      List.init config.num_layers (fun i ->
+        let in_channels = if i == 0 then in_channels else out_channels in
+        Resnet.ResnetBlock2D.make Var_store.(vs // i) in_channels cfg)
+    in
+    let upsampler =
+      if config.add_upsample
+      then
+        Some
+          (Upsample2D.make Var_store.(vs / "upsamplers" // 0) out_channels out_channels)
+      else None
+    in
+    { resnets; upsampler; config }
+  ;;
 end
