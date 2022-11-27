@@ -130,10 +130,31 @@ module CrossAttention = struct
   ;;
 
   let attention t query key value =
-    let key = (Tensor.transpose key ~dim0:(-1) ~dim1:(-2)) in
+    let key = Tensor.transpose key ~dim0:(-1) ~dim1:(-2) in
     let key = Tensor.mul_scalar key (Scalar.f t.scale) in
     let xs = Tensor.matmul query key in
     let xs = Tensor.softmax xs ~dim:(-1) ~dtype:(T Float) in
     let xs = Tensor.matmul xs value in
     reshape_batch_dim_to_heads t xs
+  ;;
+
+  let forward t xs context =
+    let sequence_length = Array.of_list (Tensor.size xs) in
+    let sequence_length = sequence_length.(1) in
+    let query = Layer.forward t.to_q xs in
+    let dim = Base.List.last_exn (Tensor.size query) in
+    let context = Option.value context ~default:xs in
+    let key = Layer.forward t.to_k context in
+    let value = Layer.forward t.to_v context in
+    let query = reshape_heads_to_batch_dim t query in
+    let key = reshape_heads_to_batch_dim t key in
+    let value = reshape_heads_to_batch_dim t value in
+    Option.fold ~none:(attention t query key value) ~some:(fun slice_size ->
+      if List.hd (Tensor.size query) / slice_size <= 1
+      then attention t query key value
+      else
+        Layer.forward
+          t.to_out
+          (sliced_attention t query key value sequence_length dim slice_size))
+  ;;
 end
