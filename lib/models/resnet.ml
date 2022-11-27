@@ -87,12 +87,6 @@ let make (vs : Var_store.t) in_channels config =
       (fun tc -> Nn.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
       config.temb_channels
   in
-  print_int out_channels;
-  print_int (Option.value config.temb_channels ~default:0);
-  print_int config.groups;
-  print_int (Option.value config.groups_out ~default:0);
-  print_float config.eps;
-  let _ = Option.value config.use_in_shortcut ~default:true in
   print_float config.output_scale_factor;
   { norm1; conv1; norm2; conv2; conv_shortcut; time_emb_proj; config }
 ;;
@@ -101,5 +95,9 @@ let print_resnet t =
   let _ = t.norm1 in
   let _ = t.config in
   let _ = t.conv1 in
+  let _ = t.norm2 in
+  let _ = t.conv2 in
+  let _ = t.conv_shortcut in
+  let _ = t.time_emb_proj in
   ()
 ;;
