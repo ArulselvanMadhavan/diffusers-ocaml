@@ -91,6 +91,31 @@ let make (vs : Var_store.t) in_channels config =
   { norm1; conv1; norm2; conv2; conv_shortcut; time_emb_proj; config }
 ;;
 
+let forward t xs temb =
+  let shortcut_xs =
+    Option.fold
+      ~none:xs
+      ~some:(fun conv_shortcut -> Layer.forward conv_shortcut xs)
+      t.conv_shortcut
+  in
+  let xs = Group_norm.forward t.norm1 xs in
+  let xs = Tensor.silu xs in
+  let xs = Layer.forward t.conv1 xs in
+  let xs =
+    match temb, t.time_emb_proj with
+    | Some temb, Some time_emb_proj ->
+      let temb = Tensor.silu temb in
+      let temb = Layer.forward time_emb_proj temb in
+      let temb = Tensor.unsqueeze temb ~dim:(-1) in
+      let temb = Tensor.unsqueeze temb ~dim:(-1) in
+      Tensor.add xs temb
+    | _ -> xs
+  in
+  let xs = Tensor.silu (Group_norm.forward t.norm2 xs) in
+  let xs = Layer.forward t.conv2 xs in
+  Tensor.div_scalar (Tensor.add xs shortcut_xs) (Scalar.f t.config.output_scale_factor)
+;;
+
 let print_resnet t =
   let _ = t.norm1 in
   let _ = t.config in
