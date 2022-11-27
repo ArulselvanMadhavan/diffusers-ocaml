@@ -229,8 +229,7 @@ module SpatialTransformer = struct
     { norm : Group_norm.t
     ; proj_in : Nn.t
     ; transformer_blocks : BasicTransformerBlock.t list
-    ; proj_out : Nn.t
-    ; config : SpatialTransformerConfig.t
+    ; proj_out : Nn.t (* ; config : SpatialTransformerConfig.t *)
     }
 
   let make vs in_channels n_heads d_head (config : SpatialTransformerConfig.t) =
@@ -273,20 +272,109 @@ module SpatialTransformer = struct
         ~input_dim:inner_dim
         in_channels
     in
-    { norm; proj_in; transformer_blocks; proj_out; config }
+    { norm; proj_in; transformer_blocks; proj_out }
   ;;
 
   let forward t xs context =
-    let (batch, _channel, height, weight) = Tensor.shape4_exn xs in
+    let batch, _channel, height, weight = Tensor.shape4_exn xs in
     let residual = xs in
     let xs = Group_norm.forward t.norm xs in
     let xs = Layer.forward t.proj_in xs in
     let inner_dim = Array.of_list (Tensor.shape xs) in
     let inner_dim = inner_dim.(1) in
-    let xs = Tensor.permute xs ~dims:[0;2;3;1] in
-    let xs = Tensor.view xs ~size:[batch; height*weight;inner_dim] in
-    let xs = List.fold_left (fun acc tb -> BasicTransformerBlock.forward tb acc context) xs t.transformer_blocks in
-    let xs = Tensor.view xs ~size:[batch;height;weight;inner_dim] in
-    let xs = Tensor.permute xs ~dims:[0;3;1;2] in
+    let xs = Tensor.permute xs ~dims:[ 0; 2; 3; 1 ] in
+    let xs = Tensor.view xs ~size:[ batch; height * weight; inner_dim ] in
+    let xs =
+      List.fold_left
+        (fun acc tb -> BasicTransformerBlock.forward tb acc context)
+        xs
+        t.transformer_blocks
+    in
+    let xs = Tensor.view xs ~size:[ batch; height; weight; inner_dim ] in
+    let xs = Tensor.permute xs ~dims:[ 0; 3; 1; 2 ] in
     Tensor.add (Layer.forward t.proj_out xs) residual
+  ;;
+end
+
+module AttentionBlockConfig = struct
+  type t =
+    { num_head_channels : int option
+    ; num_groups : int
+    ; rescale_output_factor : float
+    ; eps : float
+    }
+
+  let make () =
+    { num_head_channels = None; num_groups = 32; rescale_output_factor = 1.; eps = 1e-5 }
+  ;;
+end
+
+module AttentionBlock = struct
+  type t =
+    { group_norm : Group_norm.t
+    ; query : Nn.t
+    ; key : Nn.t
+    ; value : Nn.t
+    ; proj_attn : Nn.t
+    ; channels : int
+    ; num_heads : int
+    ; config : AttentionBlockConfig.t
+    }
+
+  let make vs channels (config : AttentionBlockConfig.t) =
+    let num_head_channels = Option.value config.num_head_channels ~default:channels in
+    let num_heads = channels / num_head_channels in
+    let group_norm =
+      Group_norm.make
+        Var_store.(vs / "group_norm")
+        ~num_groups:config.num_groups
+        ~num_channels:channels
+        ~eps:config.eps
+        ~use_bias:true
+    in
+    let query = Nn.linear Var_store.(vs / "query") ~input_dim:channels channels in
+    let key = Nn.linear Var_store.(vs / "key") ~input_dim:channels channels in
+    let value = Nn.linear Var_store.(vs / "value") ~input_dim:channels channels in
+    let proj_attn = Nn.linear Var_store.(vs / "proj_attn") ~input_dim:channels channels in
+    { group_norm; query; key; value; proj_attn; channels; num_heads; config }
+  ;;
+
+  let transpose_for_scores t xs =
+    let batch, seq, _h_times_d = Tensor.shape3_exn xs in
+    let xs = Tensor.view xs ~size:[ batch; seq; t.num_heads; -1 ] in
+    Tensor.permute xs ~dims:[ 0; 2; 1; 3 ]
+  ;;
+
+  let forward t xs =
+    let residual = xs in
+    let batch, channel, height, width = Tensor.shape4_exn xs in
+    let xs = Group_norm.forward t.group_norm xs in
+    let xs = Tensor.view xs ~size:[ batch; channel; height * width ] in
+    let xs = Tensor.transpose xs ~dim0:1 ~dim1:2 in
+    let query_proj = Layer.forward t.query xs in
+    let key_proj = Layer.forward t.key xs in
+    let value_proj = Layer.forward t.value xs in
+    let query_states = transpose_for_scores t query_proj in
+    let key_states = transpose_for_scores t key_proj in
+    let value_states = transpose_for_scores t value_proj in
+    let scale =
+      Base.Float.((Float.of_int t.channels / Float.of_int t.num_heads) ** -0.25)
+    in
+    let query_states = Tensor.mul_scalar query_states (Scalar.f scale) in
+    let key_states = Tensor.transpose key_states ~dim0:(-1) ~dim1:(-2) in
+    let key_states = Tensor.mul_scalar key_states (Scalar.f scale) in
+    let attention_scores = Tensor.matmul query_states key_states in
+    let attention_probs = Tensor.softmax attention_scores ~dim:(-1) ~dtype:(T Float) in
+    let xs = Tensor.matmul attention_probs value_states in
+    let xs = Tensor.permute xs ~dims:[ 0; 2; 1; 3 ] in
+    let xs = Tensor.contiguous xs in
+    let new_xs_shape = Tensor.shape xs in
+    let new_xs_shape = Base.List.drop new_xs_shape 2 in
+    let new_xs_shape = Base.List.append new_xs_shape [ t.channels ] in
+    let xs = Tensor.view xs ~size:new_xs_shape in
+    let xs = Layer.forward t.proj_attn xs in
+    let xs = Tensor.transpose xs ~dim0:(-1) ~dim1:(-2) in
+    let xs = Tensor.view xs ~size:[ batch; channel; height; width ] in
+    Tensor.div_scalar (Tensor.add xs residual) (Scalar.f t.config.rescale_output_factor)
+  ;;
 end
