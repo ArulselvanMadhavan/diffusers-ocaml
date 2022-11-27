@@ -22,11 +22,12 @@ let make_config () =
 ;;
 
 type t =
-  { norm1 : Group_norm.t (* ; norm2 : Torch.Nn.t *)
+  { norm1 : Group_norm.t
+  ; norm2 : Group_norm.t
   ; conv1 : Torch.Nn.t
-      (* ; conv2 : Torch.Nn.t *)
-      (* ; time_emb_proj : Torch.Nn.t option *)
-      (* ; conv_shortcut : Torch.Nn.t option *)
+  ; conv2 : Torch.Nn.t
+  ; time_emb_proj : Torch.Nn.t option
+  ; conv_shortcut : Torch.Nn.t option
   ; config : resnet_block_2dconfig
   }
 
@@ -54,6 +55,7 @@ let make (vs : Var_store.t) in_channels config =
       Var_store.(vs / "norm2")
       ~num_groups:groups_out
       ~num_channels:out_channels
+      ~eps:config.eps
   in
   let conv2 =
     Nn.conv2d
@@ -92,7 +94,7 @@ let make (vs : Var_store.t) in_channels config =
   print_float config.eps;
   let _ = Option.value config.use_in_shortcut ~default:true in
   print_float config.output_scale_factor;
-  { norm1; conv1; config }
+  { norm1; conv1; norm2; conv2; conv_shortcut; time_emb_proj; config }
 ;;
 
 let print_resnet t =
