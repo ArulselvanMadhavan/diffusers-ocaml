@@ -88,4 +88,25 @@ module DownEncoderBlock2DConfig = struct
     ; add_downsample : bool
     ; downsample_padding : int
     }
+
+  let make () =
+    { num_layers = 1
+    ; resnet_eps = 1e-6
+    ; resnet_groups = 32
+    ; output_scale_factor = 1.
+    ; add_downsample = true
+    ; downsample_padding = 1
+    }
+  ;;
+end
+
+module DownEncoderBlock2D = struct
+  type t =
+    { resnets : Resnet.ResnetBlock2D.t list
+    ; downsampler : Downsample2D.t option
+    }
+
+  (* let make vs in_channels out_channels (config: DownEncoderBlock2DConfig.t) = *)
+  (*     let vs = Var_store.(vs / "resnets") in *)
+  (*     let cfg = Resnet.ResnetBlock2DConfig.default () in *)
 end

@@ -1,11 +1,15 @@
 open Torch
 
-type resnet_block_2dconfig
+module ResnetBlock2DConfig : sig
+  type t
 
-val make_config : unit -> resnet_block_2dconfig
+  val default : unit -> t
+end
 
-type t
+module ResnetBlock2D : sig
+  type t
 
-val make : Var_store.t -> int -> resnet_block_2dconfig -> t
-val print_resnet : t -> unit
-val forward : t -> Tensor.t -> Tensor.t option -> Tensor.t
+  val make : Var_store.t -> int -> ResnetBlock2DConfig.t -> t
+  val print_resnet : t -> unit
+  val forward : t -> Tensor.t -> Tensor.t option -> Tensor.t
+end
