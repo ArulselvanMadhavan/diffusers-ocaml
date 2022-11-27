@@ -21,26 +21,83 @@ let make_config () =
   }
 ;;
 
-(* type t = *)
-(*   { norm1 : Torch.Nn.t *)
-(*   ; norm2 : Torch.Nn.t *)
-(*   ; conv1 : Torch.Nn.t *)
-(*   ; conv2 : Torch.Nn.t *)
-(*   ; time_emb_proj : Torch.Nn.t option *)
-(*   ; conv_shortcut : Torch.Nn.t option *)
-(*   ; config : resnet_block_2dconfig *)
-(*   } *)
+type t =
+  { norm1 : Group_norm.t (* ; norm2 : Torch.Nn.t *)
+  ; conv1 : Torch.Nn.t
+      (* ; conv2 : Torch.Nn.t *)
+      (* ; time_emb_proj : Torch.Nn.t option *)
+      (* ; conv_shortcut : Torch.Nn.t option *)
+  ; config : resnet_block_2dconfig
+  }
 
-type t = int
-
-let make (_vs : Var_store.t) in_channels config =
+let make (vs : Var_store.t) in_channels config =
   let out_channels = Option.value config.out_channels ~default:in_channels in
+  let norm1 =
+    Group_norm.make
+      Var_store.(vs / "norm1")
+      ~num_groups:config.groups
+      ~num_channels:in_channels
+      ~eps:config.eps
+  in
+  let conv1 =
+    Nn.conv2d
+      Var_store.(vs / "conv1")
+      ~ksize:(3, 3)
+      ~stride:(1, 1)
+      ~padding:(1, 1)
+      ~input_dim:in_channels
+      out_channels
+  in
+  let groups_out = Option.value config.groups_out ~default:config.groups in
+  let norm2 =
+    Group_norm.make
+      Var_store.(vs / "norm2")
+      ~num_groups:groups_out
+      ~num_channels:out_channels
+  in
+  let conv2 =
+    Nn.conv2d
+      Var_store.(vs / "conv2")
+      ~ksize:(3, 3)
+      ~stride:(1, 1)
+      ~padding:(1, 1)
+      ~input_dim:out_channels
+      out_channels
+  in
+  let use_in_shortcut =
+    Option.value config.use_in_shortcut ~default:(in_channels != out_channels)
+  in
+  let conv_shortcut =
+    if use_in_shortcut
+    then
+      Some
+        (Nn.conv2d
+           Var_store.(vs / "conv_shortcut")
+           ~ksize:(1, 1)
+           ~stride:(1, 1)
+           ~padding:(1, 1)
+           ~input_dim:in_channels
+           out_channels)
+    else None
+  in
+  let time_emb_proj =
+    Option.map
+      (fun tc -> Nn.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
+      config.temb_channels
+  in
   print_int out_channels;
   print_int (Option.value config.temb_channels ~default:0);
   print_int config.groups;
   print_int (Option.value config.groups_out ~default:0);
   print_float config.eps;
   let _ = Option.value config.use_in_shortcut ~default:true in
-  print_float config.output_scale_factor
+  print_float config.output_scale_factor;
+  { norm1; conv1; config }
 ;;
-(* pub fn new(vs: nn::Path, in_channels: i64, config: ResnetBlock2DConfig) -> Self { *)
+
+let print_resnet t =
+  let _ = t.norm1 in
+  let _ = t.config in
+  let _ = t.conv1 in
+  ()
+;;
