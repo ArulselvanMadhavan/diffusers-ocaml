@@ -228,20 +228,65 @@ module SpatialTransformer = struct
   type t =
     { norm : Group_norm.t
     ; proj_in : Nn.t
-    ; transformer_blocks : BasicTransformerBlock.t array
+    ; transformer_blocks : BasicTransformerBlock.t list
     ; proj_out : Nn.t
     ; config : SpatialTransformerConfig.t
     }
 
-    (* pub fn new( *)
-    (*     vs: nn::Path, *)
-    (*     in_channels: i64, *)
-    (*     n_heads: i64, *)
-    (*     d_head: i64, *)
-    (*     config: SpatialTransformerConfig, *)
-  (* ) -> Self { *)
+  let make vs in_channels n_heads d_head (config : SpatialTransformerConfig.t) =
+    let inner_dim = n_heads * d_head in
+    let num_groups = config.num_groups in
+    let norm =
+      Group_norm.make
+        Var_store.(vs / "norm")
+        ~num_groups
+        ~num_channels:in_channels
+        ~eps:1e-6
+        ~use_bias:true
+    in
+    let proj_in =
+      Nn.conv2d
+        Var_store.(vs / "proj_in")
+        ~ksize:(1, 1)
+        ~stride:(1, 1)
+        ~padding:(0, 0)
+        ~input_dim:in_channels
+        inner_dim
+    in
+    let vs_tb = Var_store.(vs / "transformer_blocks") in
+    let transformer_blocks =
+      List.init config.depth (fun index ->
+        BasicTransformerBlock.make
+          Var_store.(vs_tb // index)
+          inner_dim
+          n_heads
+          d_head
+          config.context_dim
+          config.sliced_attention_size)
+    in
+    let proj_out =
+      Nn.conv2d
+        Var_store.(vs / "proj_out")
+        ~ksize:(1, 1)
+        ~stride:(1, 1)
+        ~padding:(0, 0)
+        ~input_dim:inner_dim
+        in_channels
+    in
+    { norm; proj_in; transformer_blocks; proj_out; config }
+  ;;
 
-  (* let make vs in_channels n_heads d_head config = *)
-  (*   let inner_dim = n_heads * d_head in *)
-  (*   let norm = Group_norm.make Var_store.(vs / "norm") config.num_groups *)
+  let forward t xs context =
+    let (batch, _channel, height, weight) = Tensor.shape4_exn xs in
+    let residual = xs in
+    let xs = Group_norm.forward t.norm xs in
+    let xs = Layer.forward t.proj_in xs in
+    let inner_dim = Array.of_list (Tensor.shape xs) in
+    let inner_dim = inner_dim.(1) in
+    let xs = Tensor.permute xs ~dims:[0;2;3;1] in
+    let xs = Tensor.view xs ~size:[batch; height*weight;inner_dim] in
+    let xs = List.fold_left (fun acc tb -> BasicTransformerBlock.forward tb acc context) xs t.transformer_blocks in
+    let xs = Tensor.view xs ~size:[batch;height;weight;inner_dim] in
+    let xs = Tensor.permute xs ~dims:[0;3;1;2] in
+    Tensor.add (Layer.forward t.proj_out xs) residual
 end
