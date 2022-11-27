@@ -39,6 +39,7 @@ let make (vs : Var_store.t) in_channels config =
       ~num_groups:config.groups
       ~num_channels:in_channels
       ~eps:config.eps
+      ~use_bias:true
   in
   let conv1 =
     Nn.conv2d
@@ -56,6 +57,7 @@ let make (vs : Var_store.t) in_channels config =
       ~num_groups:groups_out
       ~num_channels:out_channels
       ~eps:config.eps
+      ~use_bias:true
   in
   let conv2 =
     Nn.conv2d

@@ -210,3 +210,38 @@ module BasicTransformerBlock = struct
     Tensor.add xs1 xs
   ;;
 end
+
+module SpatialTransformerConfig = struct
+  type t =
+    { depth : int
+    ; num_groups : int
+    ; context_dim : int option
+    ; sliced_attention_size : int option
+    }
+
+  let make () =
+    { depth = 1; num_groups = 32; context_dim = None; sliced_attention_size = None }
+  ;;
+end
+
+module SpatialTransformer = struct
+  type t =
+    { norm : Group_norm.t
+    ; proj_in : Nn.t
+    ; transformer_blocks : BasicTransformerBlock.t array
+    ; proj_out : Nn.t
+    ; config : SpatialTransformerConfig.t
+    }
+
+    (* pub fn new( *)
+    (*     vs: nn::Path, *)
+    (*     in_channels: i64, *)
+    (*     n_heads: i64, *)
+    (*     d_head: i64, *)
+    (*     config: SpatialTransformerConfig, *)
+  (* ) -> Self { *)
+
+  (* let make vs in_channels n_heads d_head config = *)
+  (*   let inner_dim = n_heads * d_head in *)
+  (*   let norm = Group_norm.make Var_store.(vs / "norm") config.num_groups *)
+end
