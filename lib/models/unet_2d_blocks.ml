@@ -593,4 +593,91 @@ module UpBlock2D = struct
     in
     { resnets; upsampler; config }
   ;;
+
+  let forward t xs res_xs temb upsample_size =
+    let xs =
+      Base.List.foldi t.resnets ~init:xs ~f:(fun index xs resnet ->
+        let xs = Tensor.cat ~dim:1 [ xs; res_xs.(Array.length res_xs - index - 1) ] in
+        Resnet.ResnetBlock2D.forward resnet xs temb)
+    in
+    Base.Option.fold t.upsampler ~init:xs ~f:(fun xs upsampler ->
+      Upsample2D.forward upsampler xs upsample_size)
+  ;;
+end
+
+module CrossAttnUpBlock2DConfig = struct
+  type t =
+    { upblock : UpBlock2DConfig.t
+    ; attn_num_head_channels : int
+    ; cross_attention_dim : int
+    ; sliced_attention_size : int option
+    }
+
+  let default () =
+    let upblock = UpBlock2DConfig.default () in
+    { upblock
+    ; attn_num_head_channels = 1
+    ; cross_attention_dim = 1280
+    ; sliced_attention_size = None
+    }
+  ;;
+end
+
+module CrossAttnUpBlock2D = struct
+  type t =
+    { upblock : UpBlock2D.t
+    ; attentions : Attention.SpatialTransformer.t list
+    ; config : CrossAttnUpBlock2DConfig.t
+    }
+
+  let make
+    vs
+    in_channels
+    prev_output_channels
+    out_channels
+    temb_channels
+    (config : CrossAttnUpBlock2DConfig.t)
+    =
+    let upblock =
+      UpBlock2D.make
+        vs
+        in_channels
+        prev_output_channels
+        out_channels
+        temb_channels
+        config.upblock
+    in
+    let n_heads = config.attn_num_head_channels in
+    let cfg =
+      Attention.SpatialTransformerConfig.
+        { depth = 1
+        ; context_dim = Some config.cross_attention_dim
+        ; num_groups = config.upblock.resnet_groups
+        ; sliced_attention_size = config.sliced_attention_size
+        }
+    in
+    let vs_attn = Var_store.(vs / "attentions") in
+    let attentions =
+      List.init config.upblock.num_layers (fun i ->
+        Attention.SpatialTransformer.make
+          Var_store.(vs_attn // i)
+          out_channels
+          n_heads
+          (out_channels / n_heads)
+          cfg)
+    in
+    { attentions; upblock; config }
+  ;;
+
+  let forward t xs res_xs temb upsample_size encoder_hidden_states =
+    let attentions = Array.of_list t.attentions in
+    let xs =
+      Base.List.foldi t.upblock.resnets ~init:xs ~f:(fun index xs resnet ->
+        let xs = Tensor.cat [ xs; res_xs.(Array.length res_xs - index - 1) ] ~dim:1 in
+        let xs = Resnet.ResnetBlock2D.forward resnet xs temb in
+        Attention.SpatialTransformer.forward attentions.(index) xs encoder_hidden_states)
+    in
+    Base.Option.fold t.upblock.upsampler ~init:xs ~f:(fun xs upsampler ->
+      Upsample2D.forward upsampler xs upsample_size)
+  ;;
 end
