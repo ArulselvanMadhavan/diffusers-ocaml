@@ -453,3 +453,144 @@ module DownBlock2D = struct
     xs, List.concat [ List.rev os1; List.rev os2 ]
   ;;
 end
+
+module CrossAttnDownBlock2DConfig = struct
+  type t =
+    { downblock : DownBlock2DConfig.t
+    ; attn_num_head_channels : int
+    ; cross_attention_dim : int
+    ; sliced_attention_size : int option
+    }
+
+  let default () =
+    let downblock = DownBlock2DConfig.default () in
+    { downblock
+    ; attn_num_head_channels = 1
+    ; cross_attention_dim = 1280
+    ; sliced_attention_size = None
+    }
+  ;;
+end
+
+module CrossAttnDownBlock2D = struct
+  type t =
+    { downblock : DownBlock2D.t
+    ; attentions : Attention.SpatialTransformer.t list
+    ; config : CrossAttnDownBlock2DConfig.t
+    }
+
+  let make
+    vs
+    in_channels
+    out_channels
+    temb_channels
+    (config : CrossAttnDownBlock2DConfig.t)
+    =
+    let downblock =
+      DownBlock2D.make vs in_channels out_channels temb_channels config.downblock
+    in
+    let n_heads = config.attn_num_head_channels in
+    let cfg =
+      Attention.SpatialTransformerConfig.
+        { depth = 1
+        ; context_dim = Some config.cross_attention_dim
+        ; num_groups = config.downblock.resnet_groups
+        ; sliced_attention_size = config.sliced_attention_size
+        }
+    in
+    let vs_attn = Var_store.(vs / "attentions") in
+    let attentions =
+      List.init config.downblock.num_layers (fun i ->
+        Attention.SpatialTransformer.make
+          Var_store.(vs_attn // i)
+          out_channels
+          n_heads
+          (out_channels / n_heads)
+          cfg)
+    in
+    { downblock; attentions; config }
+  ;;
+
+  let forward t xs temb encoder_hidden_states =
+    let ra = Base.List.zip_exn t.downblock.resnets t.attentions in
+    let xs, os1 =
+      Base.List.fold ra ~init:(xs, []) ~f:(fun (xs, os) (resnet, attn) ->
+        let xs = Resnet.ResnetBlock2D.forward resnet xs temb in
+        let xs = Attention.SpatialTransformer.forward attn xs encoder_hidden_states in
+        xs, xs :: os)
+    in
+    let xs, os2 =
+      Base.Option.fold
+        t.downblock.downsampler
+        ~init:(xs, [])
+        ~f:(fun (xs, os) downsampler ->
+        let xs = Downsample2D.forward downsampler xs in
+        xs, xs :: os)
+    in
+    xs, List.concat [ List.rev os1; List.rev os2 ]
+  ;;
+end
+
+module UpBlock2DConfig = struct
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int
+    ; output_scale_factor : float
+    ; add_upsample : bool
+    }
+
+  let default () =
+    { num_layers = 1
+    ; resnet_eps = 1e-6
+    ; resnet_groups = 32
+    ; output_scale_factor = 1.
+    ; add_upsample = true
+    }
+  ;;
+end
+
+module UpBlock2D = struct
+  type t =
+    { resnets : Resnet.ResnetBlock2D.t list
+    ; upsampler : Upsample2D.t option
+    ; config : UpBlock2DConfig.t
+    }
+
+  let make
+    vs
+    in_channels
+    prev_output_channels
+    out_channels
+    temb_channels
+    (config : UpBlock2DConfig.t)
+    =
+    let vs_resnets = Var_store.(vs / "resnets") in
+    let resnet_cfg = Resnet.ResnetBlock2DConfig.default () in
+    let resnet_cfg =
+      { resnet_cfg with
+        out_channels = Some out_channels
+      ; temb_channels
+      ; eps = config.resnet_eps
+      ; output_scale_factor = config.output_scale_factor
+      }
+    in
+    let resnets =
+      List.init config.num_layers (fun i ->
+        let res_skip_channels =
+          if i == config.num_layers - 1 then in_channels else out_channels
+        in
+        let resnet_in_channels = if i == 0 then prev_output_channels else out_channels in
+        let in_channels = resnet_in_channels + res_skip_channels in
+        Resnet.ResnetBlock2D.make Var_store.(vs_resnets // i) in_channels resnet_cfg)
+    in
+    let upsampler =
+      if config.add_upsample
+      then
+        Some
+          (Upsample2D.make Var_store.(vs / "upsamplers" // 0) out_channels out_channels)
+      else None
+    in
+    { resnets; upsampler; config }
+  ;;
+end
