@@ -377,3 +377,79 @@ module UNetMidBlock2DCrossAttn = struct
         temb)
   ;;
 end
+
+module DownBlock2DConfig = struct
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int
+    ; output_scale_factor : float
+    ; add_downsample : bool
+    ; downsample_padding : int
+    }
+
+  let default () =
+    { num_layers = 1
+    ; resnet_eps = 1e-6
+    ; resnet_groups = 32
+    ; output_scale_factor = 1.
+    ; add_downsample = true
+    ; downsample_padding = 1
+    }
+  ;;
+end
+
+module DownBlock2D = struct
+  type t =
+    { resnets : Resnet.ResnetBlock2D.t list
+    ; downsampler : Downsample2D.t option
+    ; config : DownBlock2DConfig.t
+    }
+
+  let make vs in_channels out_channels temb_channels (config : DownBlock2DConfig.t) =
+    let vs_resnets = Var_store.(vs / "resnets") in
+    let resnet_cfg = Resnet.ResnetBlock2DConfig.default () in
+    let resnet_cfg =
+      { resnet_cfg with
+        out_channels = Some out_channels
+      ; eps = config.resnet_eps
+      ; output_scale_factor = config.output_scale_factor
+      ; temb_channels
+      }
+    in
+    let resnets =
+      List.init config.num_layers (fun i ->
+        let in_channels = if i == 0 then in_channels else out_channels in
+        Resnet.ResnetBlock2D.make Var_store.(vs_resnets // i) in_channels resnet_cfg)
+    in
+    let downsampler =
+      if config.add_downsample
+      then (
+        let downsampler =
+          Downsample2D.make
+            Var_store.(vs / "downsamplers" // 0)
+            out_channels
+            true
+            out_channels
+            config.downsample_padding
+        in
+        Some downsampler)
+      else None
+    in
+    { resnets; downsampler; config }
+  ;;
+
+  let forward t xs temb =
+    let xs, os1 =
+      Base.List.fold t.resnets ~init:(xs, []) ~f:(fun (xs, os) resnet ->
+        let xs = Resnet.ResnetBlock2D.forward resnet xs temb in
+        xs, xs :: os)
+    in
+    let xs, os2 =
+      Base.Option.fold t.downsampler ~init:(xs, []) ~f:(fun (xs, os) downsampler ->
+        let xs = Downsample2D.forward downsampler xs in
+        xs, xs :: os)
+    in
+    xs, List.concat [ List.rev os1; List.rev os2 ]
+  ;;
+end
