@@ -1,9 +1,14 @@
 open Torch
 
 module SpatialTransformerConfig : sig
-  type t
+  type t =
+    { depth : int
+    ; num_groups : int
+    ; context_dim : int option
+    ; sliced_attention_size : int option
+    }
 
-  val make : unit -> t
+  val default : unit -> t
 end
 
 module SpatialTransformer : sig

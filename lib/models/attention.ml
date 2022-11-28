@@ -219,7 +219,7 @@ module SpatialTransformerConfig = struct
     ; sliced_attention_size : int option
     }
 
-  let make () =
+  let default () =
     { depth = 1; num_groups = 32; context_dim = None; sliced_attention_size = None }
   ;;
 end
