@@ -304,7 +304,7 @@ module AttentionBlockConfig = struct
     ; eps : float
     }
 
-  let make () =
+  let default () =
     { num_head_channels = None; num_groups = 32; rescale_output_factor = 1.; eps = 1e-5 }
   ;;
 end

@@ -14,9 +14,14 @@ module SpatialTransformer : sig
 end
 
 module AttentionBlockConfig : sig
-  type t
+  type t =
+    { num_head_channels : int option
+    ; num_groups : int
+    ; rescale_output_factor : float
+    ; eps : float
+    }
 
-  val make : unit -> t
+  val default : unit -> t
 end
 
 module AttentionBlock : sig

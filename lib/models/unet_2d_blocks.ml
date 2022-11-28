@@ -177,10 +177,6 @@ module UpDecoderBlock2D = struct
     ; config : UpDecoderBlock2DConfig.t
     }
 
-  (*   vs: nn::Path, *)
-  (* in_channels: i64, *)
-  (* out_channels: i64, *)
-  (* config: UpDecoderBlock2DConfig, *)
   let make vs in_channels out_channels (config : UpDecoderBlock2DConfig.t) =
     let resnets =
       let vs = Var_store.(vs / "resnets") in
@@ -206,5 +202,88 @@ module UpDecoderBlock2D = struct
       else None
     in
     { resnets; upsampler; config }
+  ;;
+
+  let forward t xs =
+    let xs =
+      Base.List.fold t.resnets ~init:xs ~f:(fun acc r ->
+        Resnet.ResnetBlock2D.forward r acc None)
+    in
+    Base.Option.fold t.upsampler ~init:xs ~f:(fun acc upsampler ->
+      Upsample2D.forward upsampler acc None)
+  ;;
+end
+
+module UNetMidBlock2DConfig = struct
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int option
+    ; attn_num_head_channels : int option
+    ; output_scale_factor : float
+    }
+
+  let default () =
+    { num_layers = 1
+    ; resnet_eps = 1e-6
+    ; resnet_groups = Some 32
+    ; attn_num_head_channels = Some 1
+    ; output_scale_factor = 1.
+    }
+  ;;
+end
+
+module UNetMidBlock2D = struct
+  type t =
+    { resnet : Resnet.ResnetBlock2D.t
+    ; attn_resnets : (Attention.AttentionBlock.t * Resnet.ResnetBlock2D.t) list
+    ; config : UNetMidBlock2DConfig.t
+    }
+
+  let make vs in_channels temb_channels (config : UNetMidBlock2DConfig.t) =
+    let vs_resnets = Var_store.(vs / "resnets") in
+    let vs_attns = Var_store.(vs / "attentions") in
+    let resnet_groups =
+      Option.value
+        config.resnet_groups
+        ~default:(Base.Int.min Base.Int.(in_channels / 4) 32)
+    in
+    let resnet_cfg = Resnet.ResnetBlock2DConfig.default () in
+    let resnet_cfg =
+      { resnet_cfg with
+        eps = config.resnet_eps
+      ; groups = resnet_groups
+      ; output_scale_factor = config.output_scale_factor
+      ; temb_channels
+      }
+    in
+    let resnet =
+      Resnet.ResnetBlock2D.make Var_store.(vs_resnets / "0") in_channels resnet_cfg
+    in
+    let attn_cfg =
+      Attention.AttentionBlockConfig.
+        { num_head_channels = config.attn_num_head_channels
+        ; num_groups = resnet_groups
+        ; rescale_output_factor = config.output_scale_factor
+        ; eps = config.resnet_eps
+        }
+    in
+    let attn_resnets =
+      List.init config.num_layers (fun i ->
+        let attn =
+          Attention.AttentionBlock.make Var_store.(vs_attns // i) in_channels attn_cfg
+        in
+        let resnet =
+          Resnet.ResnetBlock2D.make Var_store.(vs_resnets // i) in_channels resnet_cfg
+        in
+        attn, resnet)
+    in
+    { resnet; attn_resnets; config }
+  ;;
+
+  let forward t xs temb =
+    let xs = Resnet.ResnetBlock2D.forward t.resnet xs temb in
+    Base.List.fold t.attn_resnets ~init:xs ~f:(fun xs (attn, resnet) ->
+      Resnet.ResnetBlock2D.forward resnet (Attention.AttentionBlock.forward attn xs) temb)
   ;;
 end
