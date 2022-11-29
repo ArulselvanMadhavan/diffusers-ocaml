@@ -89,7 +89,7 @@ module DownEncoderBlock2DConfig = struct
     ; downsample_padding : int
     }
 
-  let make () =
+  let default () =
     { num_layers = 1
     ; resnet_eps = 1e-6
     ; resnet_groups = 32

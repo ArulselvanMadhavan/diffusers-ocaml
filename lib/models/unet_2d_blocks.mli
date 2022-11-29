@@ -7,9 +7,16 @@ module Downsample2D : sig
 end
 
 module DownEncoderBlock2DConfig : sig
-  type t
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int
+    ; output_scale_factor : float
+    ; add_downsample : bool
+    ; downsample_padding : int
+    }
 
-  val make : unit -> t
+  val default : unit -> t
 end
 
 module DownEncoderBlock2D : sig
@@ -20,7 +27,13 @@ module DownEncoderBlock2D : sig
 end
 
 module UpDecoderBlock2DConfig : sig
-  type t
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int
+    ; output_scale_factor : float
+    ; add_upsample : bool
+    }
 
   val default : unit -> t
 end
@@ -33,7 +46,13 @@ module UpDecoderBlock2D : sig
 end
 
 module UNetMidBlock2DConfig : sig
-  type t
+  type t =
+    { num_layers : int
+    ; resnet_eps : float
+    ; resnet_groups : int option
+    ; attn_num_head_channels : int option
+    ; output_scale_factor : float
+    }
 
   val default : unit -> t
 end
