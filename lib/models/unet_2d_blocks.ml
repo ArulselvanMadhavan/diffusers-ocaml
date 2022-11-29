@@ -103,8 +103,7 @@ end
 module DownEncoderBlock2D = struct
   type t =
     { resnets : Resnet.ResnetBlock2D.t list
-    ; downsampler : Downsample2D.t option
-    ; config : DownEncoderBlock2DConfig.t
+    ; downsampler : Downsample2D.t option (* ; config : DownEncoderBlock2DConfig.t *)
     }
 
   let make vs in_channels out_channels (config : DownEncoderBlock2DConfig.t) =
@@ -138,7 +137,7 @@ module DownEncoderBlock2D = struct
         Some downsample)
       else None
     in
-    { resnets; downsampler; config }
+    { resnets; downsampler }
   ;;
 
   let forward t xs =
@@ -173,8 +172,7 @@ end
 module UpDecoderBlock2D = struct
   type t =
     { resnets : Resnet.ResnetBlock2D.t list
-    ; upsampler : Upsample2D.t option
-    ; config : UpDecoderBlock2DConfig.t
+    ; upsampler : Upsample2D.t option (* ; config : UpDecoderBlock2DConfig.t *)
     }
 
   let make vs in_channels out_channels (config : UpDecoderBlock2DConfig.t) =
@@ -201,7 +199,7 @@ module UpDecoderBlock2D = struct
           (Upsample2D.make Var_store.(vs / "upsamplers" // 0) out_channels out_channels)
       else None
     in
-    { resnets; upsampler; config }
+    { resnets; upsampler }
   ;;
 
   let forward t xs =
@@ -237,7 +235,7 @@ module UNetMidBlock2D = struct
   type t =
     { resnet : Resnet.ResnetBlock2D.t
     ; attn_resnets : (Attention.AttentionBlock.t * Resnet.ResnetBlock2D.t) list
-    ; config : UNetMidBlock2DConfig.t
+        (* ; config : UNetMidBlock2DConfig.t *)
     }
 
   let make vs in_channels temb_channels (config : UNetMidBlock2DConfig.t) =
@@ -278,7 +276,7 @@ module UNetMidBlock2D = struct
         in
         attn, resnet)
     in
-    { resnet; attn_resnets; config }
+    { resnet; attn_resnets }
   ;;
 
   let forward t xs temb =
@@ -315,7 +313,7 @@ module UNetMidBlock2DCrossAttn = struct
   type t =
     { resnet : Resnet.ResnetBlock2D.t
     ; attn_resnets : (Attention.SpatialTransformer.t * Resnet.ResnetBlock2D.t) list
-    ; config : UNetMidBlock2DCrossAttnConfig.t
+        (* ; config : UNetMidBlock2DCrossAttnConfig.t *)
     }
 
   let make vs in_channels temb_channels (config : UNetMidBlock2DCrossAttnConfig.t) =
@@ -365,7 +363,7 @@ module UNetMidBlock2DCrossAttn = struct
         in
         attn, resnet)
     in
-    { resnet; attn_resnets; config }
+    { resnet; attn_resnets }
   ;;
 
   let forward t xs temb encoder_hidden_states =
@@ -402,8 +400,7 @@ end
 module DownBlock2D = struct
   type t =
     { resnets : Resnet.ResnetBlock2D.t list
-    ; downsampler : Downsample2D.t option
-    ; config : DownBlock2DConfig.t
+    ; downsampler : Downsample2D.t option (* ; config : DownBlock2DConfig.t *)
     }
 
   let make vs in_channels out_channels temb_channels (config : DownBlock2DConfig.t) =
@@ -436,7 +433,7 @@ module DownBlock2D = struct
         Some downsampler)
       else None
     in
-    { resnets; downsampler; config }
+    { resnets; downsampler }
   ;;
 
   let forward t xs temb =
@@ -476,7 +473,7 @@ module CrossAttnDownBlock2D = struct
   type t =
     { downblock : DownBlock2D.t
     ; attentions : Attention.SpatialTransformer.t list
-    ; config : CrossAttnDownBlock2DConfig.t
+        (* ; config : CrossAttnDownBlock2DConfig.t *)
     }
 
   let make
@@ -508,7 +505,7 @@ module CrossAttnDownBlock2D = struct
           (out_channels / n_heads)
           cfg)
     in
-    { downblock; attentions; config }
+    { downblock; attentions }
   ;;
 
   let forward t xs temb encoder_hidden_states =
@@ -553,8 +550,7 @@ end
 module UpBlock2D = struct
   type t =
     { resnets : Resnet.ResnetBlock2D.t list
-    ; upsampler : Upsample2D.t option
-    ; config : UpBlock2DConfig.t
+    ; upsampler : Upsample2D.t option (* ; config : UpBlock2DConfig.t *)
     }
 
   let make
@@ -591,7 +587,7 @@ module UpBlock2D = struct
           (Upsample2D.make Var_store.(vs / "upsamplers" // 0) out_channels out_channels)
       else None
     in
-    { resnets; upsampler; config }
+    { resnets; upsampler }
   ;;
 
   let forward t xs res_xs temb upsample_size =
@@ -627,7 +623,7 @@ module CrossAttnUpBlock2D = struct
   type t =
     { upblock : UpBlock2D.t
     ; attentions : Attention.SpatialTransformer.t list
-    ; config : CrossAttnUpBlock2DConfig.t
+        (* ; config : CrossAttnUpBlock2DConfig.t *)
     }
 
   let make
@@ -666,7 +662,7 @@ module CrossAttnUpBlock2D = struct
           (out_channels / n_heads)
           cfg)
     in
-    { attentions; upblock; config }
+    { attentions; upblock }
   ;;
 
   let forward t xs res_xs temb upsample_size encoder_hidden_states =
