@@ -225,3 +225,109 @@ module Decoder = struct
     Layer.forward t.conv_out xs
   ;;
 end
+
+module AutoEncoderKLConfig = struct
+  type t =
+    { block_out_channels : int list
+    ; layers_per_block : int
+    ; latent_channels : int
+    ; norm_num_groups : int
+    }
+
+  let default () =
+    { block_out_channels = [ 64 ]
+    ; layers_per_block = 1
+    ; latent_channels = 4
+    ; norm_num_groups = 32
+    }
+  ;;
+end
+
+module DiagonalGaussianDistribution = struct
+  type t =
+    { mean : Tensor.t
+    ; std : Tensor.t
+    ; device : Device.t
+    }
+
+  let make parameters =
+    let parameters = Array.of_list (Tensor.chunk ~chunks:2 ~dim:1 parameters) in
+    let mean = parameters.(0) in
+    let logvar = parameters.(1) in
+    let std = Tensor.mul_scalar logvar (Scalar.f 0.5) in
+    let std = Tensor.exp std in
+    let device = Tensor.device std in
+    { mean; std; device }
+  ;;
+
+  let sample t =
+    let sample = Tensor.rand_like t.mean in
+    let sample = Tensor.to_device ~device:t.device sample in
+    Tensor.(t.mean + (t.std * sample))
+  ;;
+end
+
+module AutoEncoderKL = struct
+  type t =
+    { encoder : Encoder.t
+    ; decoder : Decoder.t
+    ; quant_conv : Nn.t
+    ; post_quant_conv : Nn.t
+    ; config : AutoEncoderKLConfig.t
+    }
+
+  let make vs in_channels out_channels (config : AutoEncoderKLConfig.t) =
+    let latent_channels = config.latent_channels in
+    let encoder_cfg =
+      EncoderConfig.
+        { block_out_channels = Array.of_list config.block_out_channels
+        ; layers_per_block = config.layers_per_block
+        ; norm_num_groups = config.norm_num_groups
+        ; double_z = true
+        }
+    in
+    let encoder =
+      Encoder.make Var_store.(vs / "encoder") in_channels latent_channels encoder_cfg
+    in
+    let decoder_cfg =
+      DecoderConfig.
+        { block_out_channels = config.block_out_channels
+        ; layers_per_block = config.layers_per_block
+        ; norm_num_groups = config.norm_num_groups
+        }
+    in
+    let decoder =
+      Decoder.make Var_store.(vs / "decoder") latent_channels out_channels decoder_cfg
+    in
+    let quant_conv =
+      Layer.conv2d
+        Var_store.(vs / "quant_conv")
+        ~ksize:(1, 1)
+        ~stride:(1, 1)
+        ~padding:(0, 0)
+        ~input_dim:(2 * latent_channels)
+        (2 * latent_channels)
+    in
+    let post_quant_conv =
+      Layer.conv2d
+        Var_store.(vs / "post_quant_conv")
+        ~ksize:(1, 1)
+        ~stride:(1, 1)
+        ~padding:(0, 0)
+        ~input_dim:latent_channels
+        latent_channels
+    in
+    { encoder; decoder; quant_conv; post_quant_conv; config }
+  ;;
+
+  let encode t xs =
+    let parameters = Encoder.forward t.encoder xs in
+    let parameters = Layer.forward t.quant_conv parameters in
+    DiagonalGaussianDistribution.make parameters
+  ;;
+
+  let decode t xs =
+    let xs = Layer.forward t.post_quant_conv xs in
+    Decoder.forward t.decoder xs
+  ;;
+end
