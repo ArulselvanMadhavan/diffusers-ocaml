@@ -1,7 +1,8 @@
 open Torch
+open Diffusers_transformers
 
 let log_device d =
-  Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "%b\n" |> Lwt_log.debug)
+  Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
 ;;
 
 let run_stable_diffusion prompt cpu =
@@ -16,14 +17,17 @@ let run_stable_diffusion prompt cpu =
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
   let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
-  let _tokenizer =
-    Diffusers_transformers.Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt"
-  in
-  let+ _ = Lwt_log.info (Printf.sprintf "Running with prompt:%s\n" prompt) in
+  let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
+  let* _ = Lwt_log.info (Printf.sprintf "Running with prompt:%s\n" prompt) in
+  let+ _ = Clip.Tokenizer.encode tokenizer prompt in
   ()
 ;;
 
-let run_stable_diff prompt cpu = Lwt_main.run (run_stable_diffusion prompt cpu)
+let run_stable_diff prompt cpu =
+  let section = Lwt_log.Section.make "test" in
+  Lwt_log.Section.set_level section Lwt_log.Debug;
+  Lwt_main.run (run_stable_diffusion prompt cpu)
+;;
 
 let () =
   let open Cmdliner in
