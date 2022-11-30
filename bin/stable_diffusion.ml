@@ -5,8 +5,19 @@ let log_device d =
   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
 ;;
 
+let set_logger () =
+  Lwt_log.default
+    := Lwt_log.channel
+         ~template:"$(date).$(milliseconds) [$(level)] $(message)"
+         ~close_mode:`Keep
+         ~channel:Lwt_io.stdout
+         ();
+  Lwt_log.add_rule "*" Lwt_log.Info
+;;
+
 let run_stable_diffusion prompt cpu =
   let open Lwt.Syntax in
+  set_logger ();
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
     if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
@@ -23,11 +34,7 @@ let run_stable_diffusion prompt cpu =
   ()
 ;;
 
-let run_stable_diff prompt cpu =
-  let section = Lwt_log.Section.make "test" in
-  Lwt_log.Section.set_level section Lwt_log.Debug;
-  Lwt_main.run (run_stable_diffusion prompt cpu)
-;;
+let exec_stable_diff prompt cpu = Lwt_main.run (run_stable_diffusion prompt cpu)
 
 let () =
   let open Cmdliner in
@@ -49,7 +56,7 @@ let () =
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in
   let cmd =
-    Term.(const run_stable_diff $ prompt $ cpu), Cmd.info "generate" ~sdocs:"" ~doc ~man
+    Term.(const exec_stable_diff $ prompt $ cpu), Cmd.info "generate" ~sdocs:"" ~doc ~man
   in
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in
   let info =
