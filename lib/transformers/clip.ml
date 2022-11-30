@@ -1,9 +1,9 @@
-let vocab_size = 49408
-let embed_dim = 768
-let intermediate_size = 3072
-let max_position_embeddings = 77
-let num_hidden_layers = 12
-let num_attention_heads = 12
+let _vocab_size = 49408
+let _embed_dim = 768
+let _intermediate_size = 3072
+let _max_position_embeddings = 77
+let _num_hidden_layers = 12
+let _num_attention_heads = 12
 let pat = ""
 (* let pat = *)
 (*   "<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+" *)
@@ -282,7 +282,7 @@ module Tokenizer = struct
 
   let make bpe_path =
     let bpe_lines = Stdio.In_channel.read_lines bpe_path in
-    let bpe_lines = Base.List.take bpe_lines (49153 - 256 - 2 + 1) in
+    let bpe_lines = Base.List.take bpe_lines (49152 - 256 - 2 + 1) in
     let bpe_lines = List.tl bpe_lines in
     let bpe_lines =
       Base.List.map bpe_lines ~f:(fun line ->
