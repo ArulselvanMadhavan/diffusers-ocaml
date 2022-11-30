@@ -1,16 +1,19 @@
 open Torch
 
 let run_stable_diffusion prompt cpu =
-  Printf.printf "%s\n" prompt;
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
     if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
     then Device.Cpu
     else cuda_device
   in
-  let _clip_device = cpu_or_cuda "clip" in
-  let _vae_device = cpu_or_cuda "vae" in
-  let _unet_device = cpu_or_cuda "unet" in
+  let clip_device = cpu_or_cuda "clip" in
+  let vae_device = cpu_or_cuda "vae" in
+  let unet_device = cpu_or_cuda "unet" in
+  Printf.printf "%s\n" prompt;
+  List.iter
+    (fun d -> Printf.printf "%b\n" (Device.is_cuda d))
+    [ clip_device; vae_device; unet_device ];
   ()
 ;;
 
