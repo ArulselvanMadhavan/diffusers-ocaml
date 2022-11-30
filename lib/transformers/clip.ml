@@ -324,7 +324,7 @@ module Tokenizer = struct
     let s = Base.String.lowercase s in
     (* let bpe_tokens = [t.start_of_text_token] in *)
     let matches = Re2.find_all_exn t.re s in
-    Lwt.all @@ Base.List.map matches ~f:Lwt_log.info
+    Lwt.all @@ Base.List.map matches ~f:(fun s -> Lwt_log.info_f "Token:%s" s)
   ;;
 
   let encode t s = encode_pad t s (Some max_position_embeddings)

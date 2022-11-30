@@ -29,7 +29,7 @@ let run_stable_diffusion prompt cpu =
   let unet_device = cpu_or_cuda "unet" in
   let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
   let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
-  let* _ = Lwt_log.info (Printf.sprintf "Running with prompt:%s\n" prompt) in
+  let* _ = Lwt_log.info_f "Running with prompt:%s" prompt in
   let+ _ = Clip.Tokenizer.encode tokenizer prompt in
   ()
 ;;
