@@ -4,10 +4,9 @@ let intermediate_size = 3072
 let max_position_embeddings = 77
 let num_hidden_layers = 12
 let num_attention_heads = 12
-
-let pat =
-  "<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"
-;;
+let pat = ""
+(* let pat = *)
+(*   "<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+" *)
 
 let bytes_to_unicode =
   [| 33, "!"
