@@ -1,5 +1,5 @@
 open Torch
-    
+
 module EncoderConfig : sig
   type t
 
@@ -28,16 +28,6 @@ module AutoEncoderKL : sig
   type t
 
   val make : Var_store.t -> int -> int -> AutoEncoderKLConfig.t -> t
-
   val encode : t -> Tensor.t -> DiagonalGaussianDistribution.t
-
   val decode : t -> Tensor.t -> Tensor.t
 end
-
-
-
-
-
-
-
-

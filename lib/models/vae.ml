@@ -24,8 +24,7 @@ module Encoder = struct
     ; down_blocks : DownEncoderBlock2D.t array
     ; mid_block : UNetMidBlock2D.t
     ; conv_norm_out : Group_norm.t
-    ; conv_out : Nn.t
-    (* ; config : EncoderConfig.t *)
+    ; conv_out : Nn.t (* ; config : EncoderConfig.t *)
     }
 
   let make vs in_channels out_channels (config : EncoderConfig.t) =
@@ -99,7 +98,7 @@ module Encoder = struct
         ~input_dim:last_block_out_channels
         conv_out_channels
     in
-    { conv_in; down_blocks; mid_block; conv_norm_out; conv_out; }
+    { conv_in; down_blocks; mid_block; conv_norm_out; conv_out }
   ;;
 
   let forward t xs =
@@ -133,8 +132,7 @@ module Decoder = struct
     ; up_blocks : UpDecoderBlock2D.t list
     ; mid_block : UNetMidBlock2D.t
     ; conv_norm_out : Group_norm.t
-    ; conv_out : Nn.t
-    (* ; config : DecoderConfig.t *)
+    ; conv_out : Nn.t (* ; config : DecoderConfig.t *)
     }
 
   let make vs in_channels out_channels (config : DecoderConfig.t) =
@@ -210,7 +208,7 @@ module Decoder = struct
         ~stride:(1, 1)
         ~padding:(1, 1)
     in
-    { conv_in; conv_out; conv_norm_out; up_blocks; mid_block; }
+    { conv_in; conv_out; conv_norm_out; up_blocks; mid_block }
   ;;
 
   let forward t xs =
@@ -272,8 +270,7 @@ module AutoEncoderKL = struct
     { encoder : Encoder.t
     ; decoder : Decoder.t
     ; quant_conv : Nn.t
-    ; post_quant_conv : Nn.t
-    (* ; config : AutoEncoderKLConfig.t *)
+    ; post_quant_conv : Nn.t (* ; config : AutoEncoderKLConfig.t *)
     }
 
   let make vs in_channels out_channels (config : AutoEncoderKLConfig.t) =
@@ -317,7 +314,7 @@ module AutoEncoderKL = struct
         ~input_dim:latent_channels
         latent_channels
     in
-    { encoder; decoder; quant_conv; post_quant_conv; }
+    { encoder; decoder; quant_conv; post_quant_conv }
   ;;
 
   let encode t xs =
