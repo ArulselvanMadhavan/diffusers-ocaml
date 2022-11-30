@@ -319,4 +319,15 @@ module Tokenizer = struct
     let re = pat in
     { re; encoder; decoder; bpe_ranks; start_of_text_token; end_of_text_token }
   ;;
+
+let encode_pad t s _pad_size_to =
+  let s = Base.String.lowercase s in
+  (* let bpe_tokens = [t.start_of_text_token] in *)
+  let matches = Re2.find_all_exn t.re s in
+  Lwt.all @@ Base.List.map matches ~f:(Lwt_log.info)
 end
+
+    (* pub fn encode_pad(&self, s: &str, pad_size_to: Option<usize>) -> anyhow::Result<Vec<usize>> { *)
+
+(* let encode t s = *)
+(*   () *)
