@@ -9,5 +9,5 @@ module Tokenizer : sig
     }
 
   val make : string -> t
-  val encode : t -> string -> unit list Lwt.t
+  val encode : t -> string -> int list
 end

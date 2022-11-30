@@ -320,17 +320,81 @@ module Tokenizer = struct
     { re; encoder; decoder; bpe_ranks; start_of_text_token; end_of_text_token }
   ;;
 
-  let encode_pad t s _pad_size_to =
+  let get_pairs word =
+    let pairs = Hashtbl.create (Array.length word - 1) in
+    Base.Array.iteri word ~f:(fun i v ->
+      if i > 0 then Hashtbl.add pairs word.(i - 1) v else ());
+    pairs
+  ;;
+
+  let new_word word = function
+    | Some (_rank, (first, second)) ->
+      let index = ref 0 in
+      let new_word = ref [] in
+      while !index < Array.length word do
+        let w = word.(!index) in
+        if !index + 1 < Array.length word && w == first && word.(!index + 1) == second
+        then (
+          new_word := Printf.sprintf "%s%s" first second :: !new_word;
+          index := !index + 2)
+        else (
+          new_word := w :: !new_word;
+          index := !index + 1)
+      done;
+      Array.of_list (List.rev !new_word)
+    | None -> [||]
+  ;;
+
+  let bpe t token =
+    let word = Base.Array.map (Base.String.to_array token) ~f:Base.String.of_char in
+    if Base.Array.is_empty word
+    then List.init 0 Base.Fn.id
+    else (
+      let last_index = Array.length word - 1 in
+      word.(last_index) <- Printf.sprintf "%s</w>" word.(last_index);
+      let is_done = ref false in
+      let word = ref word in
+      while Array.length !word > 1 && !is_done do
+        let pairs = get_pairs !word in
+        let choose_min r p acc =
+          Option.fold
+            ~none:(Some (r, p))
+            ~some:(fun (current_min, current_p) ->
+              if r < current_min then Some (r, p) else Some (current_min, current_p))
+            acc
+        in
+        let find_min k v acc =
+          let p = k, v in
+          let result = Hashtbl.find_opt t.bpe_ranks p in
+          match result with
+          | None -> acc
+          | Some r -> choose_min r p acc
+        in
+        let current_min = Hashtbl.fold find_min pairs None in
+        is_done := Option.is_none current_min;
+        word := new_word !word current_min
+      done;
+      Base.Array.to_list (Array.map (Hashtbl.find t.encoder) !word))
+  ;;
+
+  let encode_pad t s pad_size_to =
     let s = Base.String.lowercase s in
-    (* let bpe_tokens = [t.start_of_text_token] in *)
     let matches = Re2.find_all_exn t.re s in
-    Lwt.all @@ Base.List.map matches ~f:(fun s -> Lwt_log.info_f "Token:%s" s)
+    let bpe_tokens = Base.List.map matches ~f:(bpe t) in
+    let bpe_tokens = List.flatten bpe_tokens in
+    match pad_size_to with
+    | None -> List.append bpe_tokens [ t.end_of_text_token ]
+    | Some pad_size_to ->
+      if pad_size_to - 1 < List.length bpe_tokens
+      then (
+        let bpe_tokens = Base.List.take bpe_tokens (pad_size_to - 1) in
+        List.append bpe_tokens [ t.end_of_text_token ])
+      else (
+        let eof_tokens =
+          List.init (pad_size_to - List.length bpe_tokens) (fun _ -> t.end_of_text_token)
+        in
+        Base.List.append bpe_tokens eof_tokens)
   ;;
 
   let encode t s = encode_pad t s (Some max_position_embeddings)
 end
-
-(* pub fn encode_pad(&self, s: &str, pad_size_to: Option<usize>) -> anyhow::Result<Vec<usize>> { *)
-
-(* let encode t s = *)
-(*   () *)
