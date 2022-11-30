@@ -4,9 +4,11 @@ let _intermediate_size = 3072
 let _max_position_embeddings = 77
 let _num_hidden_layers = 12
 let _num_attention_heads = 12
-let pat = ""
-(* let pat = *)
-(*   "<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+" *)
+
+let pat =
+  Re2.create_exn
+    {|<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+|}
+;;
 
 let bytes_to_unicode =
   [| 33, "!"
@@ -272,7 +274,7 @@ exception UnexpectedLine of string
 
 module Tokenizer = struct
   type t =
-    { re : Str.regexp
+    { re : Re2.t
     ; encoder : (string, int) Hashtbl.t
     ; decoder : (int, string) Hashtbl.t
     ; bpe_ranks : (string * string, int) Hashtbl.t
@@ -314,7 +316,7 @@ module Tokenizer = struct
     Hashtbl.iter (fun k v -> Hashtbl.add decoder v k) encoder;
     let bpe_ranks = Hashtbl.create (List.length bpe_lines) in
     Base.List.iteri bpe_lines ~f:(fun i line -> Hashtbl.add bpe_ranks line i);
-    let re = Str.regexp_string pat in
+    let re = pat in
     { re; encoder; decoder; bpe_ranks; start_of_text_token; end_of_text_token }
   ;;
 end

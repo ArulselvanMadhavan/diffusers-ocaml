@@ -1,6 +1,6 @@
 module Tokenizer : sig
   type t =
-    { re : Str.regexp
+    { re : Re2.t
     ; encoder : (string, int) Hashtbl.t
     ; decoder : (int, string) Hashtbl.t
     ; bpe_ranks : (string * string, int) Hashtbl.t
