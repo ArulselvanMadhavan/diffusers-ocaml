@@ -354,7 +354,7 @@ module Tokenizer = struct
       word.(last_index) <- Printf.sprintf "%s</w>" word.(last_index);
       let is_done = ref false in
       let word = ref word in
-      while Array.length !word > 1 && !is_done do
+      while Array.length !word > 1 && !is_done == false do
         let pairs = get_pairs !word in
         let choose_min r p acc =
           Option.fold
@@ -379,9 +379,13 @@ module Tokenizer = struct
 
   let encode_pad t s pad_size_to =
     let s = Base.String.lowercase s in
-    let matches = Re2.find_all_exn t.re s in
+    let matches = Re2.find_all t.re s in
+    let matches =
+      Option.fold (Core_kernel.Or_error.ok matches) ~none:[] ~some:Base.Fn.id
+    in
     let bpe_tokens = Base.List.map matches ~f:(bpe t) in
     let bpe_tokens = List.flatten bpe_tokens in
+    let bpe_tokens = t.start_of_text_token :: bpe_tokens in
     match pad_size_to with
     | None -> List.append bpe_tokens [ t.end_of_text_token ]
     | Some pad_size_to ->

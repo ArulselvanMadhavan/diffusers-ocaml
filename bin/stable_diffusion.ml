@@ -30,7 +30,18 @@ let run_stable_diffusion prompt cpu =
   let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
   let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
   let* _ = Lwt_log.info_f "Running with prompt:%s" prompt in
-  let _ = Clip.Tokenizer.encode tokenizer prompt in
+  let tokens = Clip.Tokenizer.encode tokenizer prompt in
+  let tokens =
+    Bigarray.Array1.of_array Bigarray.Int Bigarray.C_layout (Array.of_list tokens)
+  in
+  let _tokens =
+    Tensor.of_bigarray ~device:clip_device (Bigarray.genarray_of_array1 tokens)
+  in
+  let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
+  Printf.printf "uncond_tokens:%d\n" (List.length uncond_tokens);
+  List.iter (Printf.printf "token:%d\n") (Base.List.take uncond_tokens 10);
+  (* let _tokens = Tensor.of_bigarray ~device:clip_device tokens in *)
+  (* () *)
   Lwt.return ()
 ;;
 
