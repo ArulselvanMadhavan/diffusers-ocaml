@@ -15,7 +15,7 @@ let set_logger () =
   Lwt_log.add_rule "*" Lwt_log.Info
 ;;
 
-let run_stable_diffusion prompt cpu =
+let run_stable_diffusion prompt cpu _clip_weights =
   let open Lwt.Syntax in
   set_logger ();
   let cuda_device = Torch.Device.cuda_if_available () in
@@ -40,12 +40,12 @@ let run_stable_diffusion prompt cpu =
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
   Printf.printf "uncond_tokens:%d\n" (List.length uncond_tokens);
   List.iter (Printf.printf "token:%d\n") (Base.List.take uncond_tokens 10);
-  (* let _tokens = Tensor.of_bigarray ~device:clip_device tokens in *)
-  (* () *)
   Lwt.return ()
 ;;
 
-let exec_stable_diff prompt cpu = Lwt_main.run (run_stable_diffusion prompt cpu)
+let exec_stable_diff prompt cpu clip_weights =
+  Lwt_main.run (run_stable_diffusion prompt cpu clip_weights)
+;;
 
 let () =
   let open Cmdliner in
@@ -64,10 +64,17 @@ let () =
           ~docv:"CPU"
           ~doc:"components to run on cpu. supported:all, clip, vae, unet")
   in
+  let clip_weights =
+    Arg.(
+      required
+      & pos 2 (some string) None
+      & info [] ~docv:"CLIP_WEIGHTS_FILE" ~doc:"clip weights in ot format")
+  in
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in
   let cmd =
-    Term.(const exec_stable_diff $ prompt $ cpu), Cmd.info "generate" ~sdocs:"" ~doc ~man
+    ( Term.(const exec_stable_diff $ prompt $ cpu $ clip_weights)
+    , Cmd.info "generate" ~sdocs:"" ~doc ~man )
   in
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in
   let info =
