@@ -2,7 +2,7 @@ open Torch
 
 let vocab_size = 49408
 let embed_dim = 768
-let _intermediate_size = 3072
+let intermediate_size = 3072
 let max_position_embeddings = 77
 let _num_hidden_layers = 12
 let num_attention_heads = 12
@@ -511,5 +511,55 @@ module ClipAttention = struct
     let attn_output = Tensor.transpose attn_output ~dim0:1 ~dim1:2 in
     let attn_output = Tensor.reshape attn_output ~shape:[ bsz; tgt_len; embed_dim ] in
     Layer.forward t.out_proj attn_output
+  ;;
+end
+
+module ClipMlp = struct
+  type t =
+    { fc1 : Layer.t
+    ; fc2 : Layer.t
+    }
+
+  let make vs =
+    let fc1 =
+      Layer.linear Var_store.(vs / "fc1") ~input_dim:embed_dim intermediate_size
+    in
+    let fc2 =
+      Layer.linear Var_store.(vs / "fc2") ~input_dim:intermediate_size embed_dim
+    in
+    { fc1; fc2 }
+  ;;
+
+  let forward t xs =
+    let xs = Layer.forward t.fc1 xs in
+    let xs = quick_gelu xs in
+    Layer.forward t.fc2 xs
+  ;;
+end
+
+module ClipEncoderLayer = struct
+  type t =
+    { self_attn : ClipAttention.t
+    ; layer_norm1 : Nn.t
+    ; mlp : ClipMlp.t
+    ; layer_norm2 : Nn.t
+    }
+
+  let make vs =
+    let self_attn = ClipAttention.make Var_store.(vs / "self_attn") in
+    let layer_norm1 = Layer.layer_norm Var_store.(vs / "layer_norm1") embed_dim in
+    let mlp = ClipMlp.make Var_store.(vs / "mlp") in
+    let layer_norm2 = Layer.layer_norm Var_store.(vs / "layer_norm2") embed_dim in
+    { self_attn; layer_norm1; mlp; layer_norm2 }
+
+  let forward t xs causal_attention_mask =
+    let residual = xs in
+    let xs = Layer.forward t.layer_norm1 xs in
+    let xs = ClipAttention.forward t.self_attn xs causal_attention_mask in
+    let xs = Tensor.(xs + residual) in
+    let residual = xs in
+    let xs = Layer.forward t.layer_norm2 xs in
+    let xs = ClipMlp.forward t.mlp xs in
+    Tensor.(xs + residual)
   ;;
 end
