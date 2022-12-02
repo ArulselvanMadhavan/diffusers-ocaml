@@ -6,4 +6,5 @@
   diffusers_models
   cmdliner
   torch
-  diffusers_transformers))
+  diffusers_transformers
+  diffusers_pipelines))

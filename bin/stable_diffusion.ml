@@ -1,5 +1,6 @@
 open Torch
 open Diffusers_transformers
+module DPipelines = Diffusers_pipelines
 
 let log_device d =
   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
@@ -42,6 +43,9 @@ let run_stable_diffusion prompt cpu clip_weights =
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
   let _uncond_tokens = array_to_tensor uncond_tokens clip_device in
   let* _ = Lwt_log.info "Building clip transformer" in
+  let _text_model =
+    DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
+  in
   Lwt.return ()
 ;;
 

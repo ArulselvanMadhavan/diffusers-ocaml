@@ -410,7 +410,7 @@ module Tokenizer = struct
   let decode t tokens =
     let s = List.map (Hashtbl.find t.decoder) tokens in
     let s = Base.String.concat s in
-    Re2.replace ~f:(fun _ -> " ") (Re2.create_exn "</w>") s
+    Re2.replace_exn ~f:(fun _ -> " ") (Re2.create_exn "</w>") s
   ;;
 end
 

@@ -1,3 +1,5 @@
+open Torch
+
 module Tokenizer : sig
   type t =
     { re : Re2.t
@@ -11,4 +13,11 @@ module Tokenizer : sig
   val make : string -> t
   val encode : t -> string -> int list
   val decode : t -> int list -> string
+end
+
+module ClipTextTransformer : sig
+  type t
+
+  val make : Var_store.t -> t
+  val forward : t -> Tensor.t -> Tensor.t
 end
