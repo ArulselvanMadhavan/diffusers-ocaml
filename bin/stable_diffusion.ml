@@ -47,9 +47,10 @@ let run_stable_diffusion prompt cpu clip_weights =
   let text_model =
     DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
   in
-  let _text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
+  let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
   let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
-  Tensor.print uncond_embeddings;
+  let _text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
+  (* let vae =  *)
   Lwt.return ()
 ;;
 

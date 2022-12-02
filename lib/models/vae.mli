@@ -13,7 +13,12 @@ module DecoderConfig : sig
 end
 
 module AutoEncoderKLConfig : sig
-  type t
+  type t =
+    { block_out_channels : int list
+    ; layers_per_block : int
+    ; latent_channels : int
+    ; norm_num_groups : int
+    }
 
   val default : unit -> t
 end
