@@ -89,7 +89,8 @@ module ResnetBlock2D = struct
     in
     let time_emb_proj =
       Option.map
-        (fun tc -> Layer.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
+        (fun tc ->
+          Layer.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
         config.temb_channels
     in
     print_float config.output_scale_factor;
