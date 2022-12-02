@@ -24,7 +24,7 @@ let array_to_tensor tokens device =
   Tensor.view tokens ~size:[ 1; -1 ]
 ;;
 
-let run_stable_diffusion prompt cpu clip_weights =
+let run_stable_diffusion prompt cpu clip_weights vae_weights =
   let open Lwt.Syntax in
   set_logger ();
   let cuda_device = Torch.Device.cuda_if_available () in
@@ -50,12 +50,12 @@ let run_stable_diffusion prompt cpu clip_weights =
   let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
   let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
   let _text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
-  (* let vae =  *)
+  let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
   Lwt.return ()
 ;;
 
-let exec_stable_diff prompt cpu clip_weights =
-  Lwt_main.run (run_stable_diffusion prompt cpu clip_weights)
+let exec_stable_diff prompt cpu clip_weights vae_weights =
+  Lwt_main.run (run_stable_diffusion prompt cpu clip_weights vae_weights)
 ;;
 
 let () =
@@ -81,10 +81,16 @@ let () =
       & pos 2 (some string) None
       & info [] ~docv:"CLIP_WEIGHTS_FILE" ~doc:"clip weights in ot format")
   in
+  let vae_weights =
+    Arg.(
+      required
+      & pos 3 (some string) None
+      & info [] ~docv:"VAE_WEIGHTS_FILE" ~doc:"vae weights in ot format")
+  in
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in
   let cmd =
-    ( Term.(const exec_stable_diff $ prompt $ cpu $ clip_weights)
+    ( Term.(const exec_stable_diff $ prompt $ cpu $ clip_weights $ vae_weights)
     , Cmd.info "generate" ~sdocs:"" ~doc ~man )
   in
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in

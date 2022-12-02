@@ -8,7 +8,7 @@ let build_clip_transformer ~clip_weights ~device =
   text_model
 ;;
 
-let build_vae vae_weights device =
+let build_vae ~vae_weights ~device =
   let vs = Var_store.create ~device ~name:"" () in
   let autoencoder_cfg =
     Diffusers_models.Vae.AutoEncoderKLConfig.

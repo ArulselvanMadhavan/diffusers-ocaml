@@ -272,7 +272,7 @@ module UNetMidBlock2D = struct
           Attention.AttentionBlock.make Var_store.(vs_attns // i) in_channels attn_cfg
         in
         let resnet =
-          Resnet.ResnetBlock2D.make Var_store.(vs_resnets // i) in_channels resnet_cfg
+          Resnet.ResnetBlock2D.make Var_store.(vs_resnets // (i + 1)) in_channels resnet_cfg
         in
         attn, resnet)
     in

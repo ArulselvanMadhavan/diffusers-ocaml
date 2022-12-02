@@ -45,7 +45,7 @@ module ResnetBlock2D = struct
         ~use_bias:true
     in
     let conv1 =
-      Nn.conv2d
+      Layer.conv2d
         Var_store.(vs / "conv1")
         ~ksize:(3, 3)
         ~stride:(1, 1)
@@ -63,7 +63,7 @@ module ResnetBlock2D = struct
         ~use_bias:true
     in
     let conv2 =
-      Nn.conv2d
+      Layer.conv2d
         Var_store.(vs / "conv2")
         ~ksize:(3, 3)
         ~stride:(1, 1)
@@ -78,7 +78,7 @@ module ResnetBlock2D = struct
       if use_in_shortcut
       then
         Some
-          (Nn.conv2d
+          (Layer.conv2d
              Var_store.(vs / "conv_shortcut")
              ~ksize:(1, 1)
              ~stride:(1, 1)
@@ -89,7 +89,7 @@ module ResnetBlock2D = struct
     in
     let time_emb_proj =
       Option.map
-        (fun tc -> Nn.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
+        (fun tc -> Layer.linear Var_store.(vs / "time_emb_proj") ~input_dim:tc out_channels)
         config.temb_channels
     in
     print_float config.output_scale_factor;
