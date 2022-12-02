@@ -137,7 +137,7 @@ module UNet2DConditionModel = struct
         else (
           let block =
             DownBlock2D.make
-              Var_store.(vs // i)
+              Var_store.(vs_db // i)
               in_channels
               out_channels
               (Some time_embed_dim)
