@@ -473,4 +473,43 @@ module ClipAttention = struct
     let scale = Float.pow (Float.of_int head_dim) (-0.5) in
     { k_proj; v_proj; q_proj; out_proj; head_dim; scale }
   ;;
+
+  let shape t xs seq_len bsz =
+    let xs = Tensor.view xs ~size:[ bsz; seq_len; num_attention_heads; t.head_dim ] in
+    let xs = Tensor.transpose xs ~dim0:1 ~dim1:2 in
+    Tensor.contiguous xs
+  ;;
+
+  let forward t xs causal_attention_mask =
+    let bsz, tgt_len, embed_dim = Tensor.shape3_exn xs in
+    let proj_shape = [ bsz * num_attention_heads; -1; t.head_dim ] in
+    let query_states = Layer.forward t.q_proj xs in
+    let query_states = Tensor.mul_scalar query_states (Scalar.f t.scale) in
+    let query_states = shape t query_states tgt_len bsz in
+    let query_states = Tensor.view query_states ~size:proj_shape in
+    let key_states = shape t (Layer.forward t.k_proj xs) (-1) bsz in
+    let key_states = Tensor.view key_states ~size:proj_shape in
+    let value_states = shape t (Layer.forward t.v_proj xs) (-1) bsz in
+    let value_states = Tensor.view value_states ~size:proj_shape in
+    let attn_weights =
+      Tensor.bmm query_states ~mat2:(Tensor.transpose key_states ~dim0:1 ~dim1:2)
+    in
+    let src_len = Array.of_list (Tensor.size key_states) in
+    let src_len = src_len.(1) in
+    let attn_weights =
+      Tensor.(
+        view attn_weights ~size:[ bsz; num_attention_heads; tgt_len; src_len ]
+        + causal_attention_mask)
+    in
+    let attn_weights =
+      Tensor.view attn_weights ~size:[ bsz * num_attention_heads; tgt_len; src_len ]
+    in
+    let attn_output = Tensor.bmm attn_weights ~mat2:value_states in
+    let attn_output =
+      Tensor.view attn_output ~size:[ bsz; num_attention_heads; tgt_len; t.head_dim ]
+    in
+    let attn_output = Tensor.transpose attn_output ~dim0:1 ~dim1:2 in
+    let attn_output = Tensor.reshape attn_output ~shape:[ bsz; tgt_len; embed_dim ] in
+    Layer.forward t.out_proj attn_output
+  ;;
 end
