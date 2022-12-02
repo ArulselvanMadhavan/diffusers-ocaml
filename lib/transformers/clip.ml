@@ -386,9 +386,7 @@ module Tokenizer = struct
     let bpe_tokens = Base.List.map matches ~f:(bpe t) in
     let bpe_tokens = List.flatten bpe_tokens in
     let bpe_tokens = t.start_of_text_token :: bpe_tokens in
-    match pad_size_to with
-    | None -> List.append bpe_tokens [ t.end_of_text_token ]
-    | Some pad_size_to ->
+    let fit_to_pad pad_size_to =
       if pad_size_to - 1 < List.length bpe_tokens
       then (
         let bpe_tokens = Base.List.take bpe_tokens (pad_size_to - 1) in
@@ -398,6 +396,8 @@ module Tokenizer = struct
           List.init (pad_size_to - List.length bpe_tokens) (fun _ -> t.end_of_text_token)
         in
         Base.List.append bpe_tokens eof_tokens)
+    in
+    Option.fold pad_size_to ~none:(List.append bpe_tokens [ t.end_of_text_token ]) ~some:fit_to_pad
   ;;
 
   let encode t s = encode_pad t s (Some max_position_embeddings)

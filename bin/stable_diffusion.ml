@@ -15,7 +15,7 @@ let set_logger () =
   Lwt_log.add_rule "*" Lwt_log.Info
 ;;
 
-let run_stable_diffusion prompt cpu _clip_weights =
+let run_stable_diffusion prompt cpu clip_weights =
   let open Lwt.Syntax in
   set_logger ();
   let cuda_device = Torch.Device.cuda_if_available () in
@@ -38,8 +38,6 @@ let run_stable_diffusion prompt cpu _clip_weights =
     Tensor.of_bigarray ~device:clip_device (Bigarray.genarray_of_array1 tokens)
   in
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
-  Printf.printf "uncond_tokens:%d\n" (List.length uncond_tokens);
-  List.iter (Printf.printf "token:%d\n") (Base.List.take uncond_tokens 10);
   Lwt.return ()
 ;;
 
