@@ -5,7 +5,7 @@ let embed_dim = 768
 let _intermediate_size = 3072
 let max_position_embeddings = 77
 let _num_hidden_layers = 12
-let _num_attention_heads = 12
+let num_attention_heads = 12
 
 let pat =
   Re2.create_exn
@@ -447,4 +447,30 @@ module ClipTextEmbeddings = struct
     let token_embedding = Layer.forward t.token_embedding xs in
     let position_embedding = Layer.forward t.position_embedding t.position_ids in
     Tensor.(token_embedding + position_embedding)
+  ;;
+end
+
+let quick_gelu xs = Tensor.(xs * sigmoid (mul_scalar xs (Scalar.f 1.702)))
+
+module ClipAttention = struct
+  type t =
+    { k_proj : Nn.t
+    ; v_proj : Nn.t
+    ; q_proj : Nn.t
+    ; out_proj : Nn.t
+    ; head_dim : int
+    ; scale : float
+    }
+
+  let make vs =
+    let k_proj = Layer.linear Var_store.(vs / "k_proj") ~input_dim:embed_dim embed_dim in
+    let v_proj = Layer.linear Var_store.(vs / "v_proj") ~input_dim:embed_dim embed_dim in
+    let q_proj = Layer.linear Var_store.(vs / "q_proj") ~input_dim:embed_dim embed_dim in
+    let out_proj =
+      Layer.linear Var_store.(vs / "out_proj") ~input_dim:embed_dim embed_dim
+    in
+    let head_dim = embed_dim / num_attention_heads in
+    let scale = Float.pow (Float.of_int head_dim) (-0.5) in
+    { k_proj; v_proj; q_proj; out_proj; head_dim; scale }
+  ;;
 end
