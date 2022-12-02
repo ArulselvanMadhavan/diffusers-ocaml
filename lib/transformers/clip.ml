@@ -4,7 +4,7 @@ let vocab_size = 49408
 let embed_dim = 768
 let intermediate_size = 3072
 let max_position_embeddings = 77
-let _num_hidden_layers = 12
+let num_hidden_layers = 12
 let num_attention_heads = 12
 
 let pat =
@@ -551,6 +551,7 @@ module ClipEncoderLayer = struct
     let mlp = ClipMlp.make Var_store.(vs / "mlp") in
     let layer_norm2 = Layer.layer_norm Var_store.(vs / "layer_norm2") embed_dim in
     { self_attn; layer_norm1; mlp; layer_norm2 }
+  ;;
 
   let forward t xs causal_attention_mask =
     let residual = xs in
@@ -561,5 +562,57 @@ module ClipEncoderLayer = struct
     let xs = Layer.forward t.layer_norm2 xs in
     let xs = ClipMlp.forward t.mlp xs in
     Tensor.(xs + residual)
+  ;;
+end
+
+module ClipEncoder = struct
+  type t = { layers : ClipEncoderLayer.t list }
+
+  let make vs =
+    let vs = Var_store.(vs / "layers") in
+    let layers =
+      List.init num_hidden_layers (fun i -> ClipEncoderLayer.make Var_store.(vs // i))
+    in
+    { layers }
+  ;;
+
+  let forward t xs causal_attention_mask =
+    Base.List.fold t.layers ~init:xs ~f:(fun acc l ->
+      ClipEncoderLayer.forward l acc causal_attention_mask)
+  ;;
+end
+
+module ClipTextTransformer = struct
+  type t =
+    { embeddings : ClipTextEmbeddings.t
+    ; encoder : ClipEncoder.t
+    ; final_layer_norm : Layer.t
+    }
+
+  let make vs =
+    let vs = Var_store.(vs / "text_model") in
+    let embeddings = ClipTextEmbeddings.make Var_store.(vs / "embeddings") in
+    let encoder = ClipEncoder.make Var_store.(vs / "encoder") in
+    let final_layer_norm =
+      Layer.layer_norm Var_store.(vs / "final_layer_norm") embed_dim
+    in
+    { embeddings; encoder; final_layer_norm }
+  ;;
+
+  let build_causal_attention_mask bsz seq_len device =
+    let mask = Tensor.ones [ bsz; seq_len; seq_len ] ~kind:(T Float) ~device in
+    let mask = Tensor.fill_ mask ~value:(Scalar.f Base.Float.min_value) in
+    let mask = Tensor.triu_ mask ~diagonal:1 in
+    Tensor.unsqueeze mask ~dim:1
+  ;;
+
+  let forward t xs =
+    let bsz, seq_len = Tensor.shape2_exn xs in
+    let xs = ClipTextEmbeddings.forward t.embeddings xs in
+    let causal_attention_mask =
+      build_causal_attention_mask bsz seq_len (Tensor.device xs)
+    in
+    let xs = ClipEncoder.forward t.encoder xs causal_attention_mask in
+    Layer.forward t.final_layer_norm xs
   ;;
 end
