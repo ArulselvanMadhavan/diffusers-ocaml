@@ -1,0 +1,3 @@
+(library
+ (name diffusers_pipelines)
+ (libraries torch diffusers_transformers))

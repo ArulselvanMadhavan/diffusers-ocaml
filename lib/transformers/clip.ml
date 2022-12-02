@@ -1,5 +1,7 @@
-let _vocab_size = 49408
-let _embed_dim = 768
+open Torch
+
+let vocab_size = 49408
+let embed_dim = 768
 let _intermediate_size = 3072
 let max_position_embeddings = 77
 let _num_hidden_layers = 12
@@ -404,4 +406,45 @@ module Tokenizer = struct
   ;;
 
   let encode t s = encode_pad t s (Some max_position_embeddings)
+
+  let decode t tokens =
+    let s = List.map (Hashtbl.find t.decoder) tokens in
+    let s = Base.String.concat s in
+    Re2.replace ~f:(fun _ -> " ") (Re2.create_exn "</w>") s
+  ;;
+end
+
+module ClipTextEmbeddings = struct
+  type t =
+    { token_embedding : Layer.t
+    ; position_embedding : Layer.t
+    ; position_ids : Tensor.t
+    }
+
+  let make vs =
+    let token_embedding =
+      Torch.Layer.embeddings
+        Var_store.(vs / "token_embedding")
+        ~num_embeddings:vocab_size
+        ~embedding_dim:embed_dim
+    in
+    let position_embedding =
+      Torch.Layer.embeddings
+        Var_store.(vs / "position_embedding")
+        ~num_embeddings:max_position_embeddings
+        ~embedding_dim:embed_dim
+    in
+    let position_ids =
+      Tensor.arange
+        ~end_:(Scalar.i max_position_embeddings)
+        ~options:(T Int64, Var_store.device vs)
+    in
+    let position_ids = Tensor.expand position_ids ~size:[ 1; -1 ] ~implicit:false in
+    { token_embedding; position_embedding; position_ids }
+  ;;
+
+  let forward t xs =
+    let token_embedding = Layer.forward t.token_embedding xs in
+    let position_embedding = Layer.forward t.position_embedding t.position_ids in
+    Tensor.(token_embedding + position_embedding)
 end
