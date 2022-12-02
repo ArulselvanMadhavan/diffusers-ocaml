@@ -125,7 +125,7 @@ let () =
     Arg.(
       value
       & opt (some int) None
-      & info [] ~docv:"SLICED_ATTENTION_SIZE" ~doc:"sliced attention size")
+      & info ["sliced_attention_size"] ~docv:"SLICED_ATTENTION_SIZE" ~doc:"sliced attention size")
   in
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in
