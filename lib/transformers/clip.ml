@@ -504,6 +504,7 @@ module ClipAttention = struct
     let attn_weights =
       Tensor.view attn_weights ~size:[ bsz * num_attention_heads; tgt_len; src_len ]
     in
+    let attn_weights = Tensor.softmax attn_weights ~dim:(-1) ~dtype:(T Float) in
     let attn_output = Tensor.bmm attn_weights ~mat2:value_states in
     let attn_output =
       Tensor.view attn_output ~size:[ bsz; num_attention_heads; tgt_len; t.head_dim ]
@@ -601,7 +602,7 @@ module ClipTextTransformer = struct
 
   let build_causal_attention_mask bsz seq_len device =
     let mask = Tensor.ones [ bsz; seq_len; seq_len ] ~kind:(T Float) ~device in
-    let mask = Tensor.fill_ mask ~value:(Scalar.f Base.Float.min_value) in
+    let mask = Tensor.fill_ mask ~value:(Scalar.f (-3.40282e+38)) in
     let mask = Tensor.triu_ mask ~diagonal:1 in
     Tensor.unsqueeze mask ~dim:1
   ;;

@@ -20,7 +20,8 @@ let array_to_tensor tokens device =
   let tokens =
     Bigarray.Array1.of_array Bigarray.Int Bigarray.C_layout (Array.of_list tokens)
   in
-  Tensor.of_bigarray ~device (Bigarray.genarray_of_array1 tokens)
+  let tokens = Tensor.of_bigarray ~device (Bigarray.genarray_of_array1 tokens) in
+  Tensor.view tokens ~size:[ 1; -1 ]
 ;;
 
 let run_stable_diffusion prompt cpu clip_weights =
@@ -39,13 +40,16 @@ let run_stable_diffusion prompt cpu clip_weights =
   let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
   let* _ = Lwt_log.info_f "Running with prompt:%s" prompt in
   let tokens = Clip.Tokenizer.encode tokenizer prompt in
-  let _tokens = array_to_tensor tokens clip_device in
+  let tokens = array_to_tensor tokens clip_device in
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
-  let _uncond_tokens = array_to_tensor uncond_tokens clip_device in
+  let uncond_tokens = array_to_tensor uncond_tokens clip_device in
   let* _ = Lwt_log.info "Building clip transformer" in
-  let _text_model =
+  let text_model =
     DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
   in
+  let _text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
+  let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
+  Tensor.print uncond_embeddings;
   Lwt.return ()
 ;;
 
