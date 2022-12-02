@@ -397,7 +397,10 @@ module Tokenizer = struct
         in
         Base.List.append bpe_tokens eof_tokens)
     in
-    Option.fold pad_size_to ~none:(List.append bpe_tokens [ t.end_of_text_token ]) ~some:fit_to_pad
+    Option.fold
+      pad_size_to
+      ~none:(List.append bpe_tokens [ t.end_of_text_token ])
+      ~some:fit_to_pad
   ;;
 
   let encode t s = encode_pad t s (Some max_position_embeddings)
