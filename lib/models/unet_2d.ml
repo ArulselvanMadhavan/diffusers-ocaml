@@ -277,7 +277,6 @@ module UNet2DConditionModel = struct
         in
         xs, Base.List.append res_xs r_xs)
     in
-    Printf.printf "conv_in shape:%s\n" (Tensor.shape_str xs);
     let xs =
       UNetMidBlock2DCrossAttn.forward
         t.mid_block
@@ -285,7 +284,7 @@ module UNet2DConditionModel = struct
         (Some emb)
         (Some encoder_hidden_states)
     in
-    let _, _ =
+    let xs, _upsample_size =
       Base.List.foldi t.up_blocks ~init:(xs, None) ~f:(fun i (xs, upsample_size) b ->
         let n_resnets =
           match b with
