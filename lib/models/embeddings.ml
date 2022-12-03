@@ -47,7 +47,7 @@ module Timesteps = struct
         (Scalar.f (Float.of_int half_dim -. t.downscale_freq_shift))
     in
     let emb = Tensor.exp exponent in
-    let emb = Tensor.(Tensor.unsqueeze xs ~dim:(-1) * Tensor.unsqueeze emb ~dim:0) in
+    let emb = Tensor.(unsqueeze xs ~dim:(-1) * unsqueeze emb ~dim:0) in
     let emb =
       if t.flip_sin_to_cos
       then Tensor.cat [ Tensor.cos emb; Tensor.sin emb ] ~dim:(-1)
