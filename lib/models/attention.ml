@@ -74,9 +74,10 @@ module CrossAttention = struct
 
   let reshape_heads_to_batch_dim t xs =
     let batch_size, seq_len, dim = Tensor.shape3_exn xs in
+    Printf.printf "Reshape:%s|%d\n" (Tensor.shape_str xs) t.heads;
     let xs = Tensor.reshape xs ~shape:[ batch_size; seq_len; t.heads; dim / t.heads ] in
     let xs = Tensor.permute xs ~dims:[ 0; 2; 1; 3 ] in
-    Tensor.reshape xs ~shape:[ batch_size * t.heads; seq_len; dim * t.heads ]
+    Tensor.reshape xs ~shape:[ batch_size * t.heads; seq_len; dim / t.heads ]
   ;;
 
   let reshape_batch_dim_to_heads t xs =

@@ -86,7 +86,6 @@ let run_stable_diffusion
       Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
     in
     Tensor.print noise_pred;
-    (* Torch_core.Wrapper.manual_seed (seed + id *)
     Lwt.return ())
 ;;
 
