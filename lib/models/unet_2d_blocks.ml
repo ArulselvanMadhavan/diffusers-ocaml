@@ -512,6 +512,7 @@ module CrossAttnDownBlock2D = struct
   ;;
 
   let forward t xs temb encoder_hidden_states =
+    (* Base.Option.iter encoder_hidden_states ~f:Tensor.print; *)
     let ra = Base.List.zip_exn t.downblock.resnets t.attentions in
     let xs, os1 =
       Base.List.fold ra ~init:(xs, []) ~f:(fun (xs, os) (resnet, attn) ->

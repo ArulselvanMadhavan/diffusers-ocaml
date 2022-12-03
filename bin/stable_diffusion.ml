@@ -4,7 +4,7 @@ module DPipelines = Diffusers_pipelines
 
 let height = 512
 let width = 512
-let _guidance_scale = 7.5
+let guidance_scale = 7.5
 
 let log_device d =
   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
@@ -62,7 +62,7 @@ let run_stable_diffusion
     in
     let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
     let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
-    let text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
+    let text_embeddings = Tensor.cat [ uncond_embeddings; text_embeddings ] ~dim:0 in
     let* _ = Lwt_log.info "Building VAE" in
     let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let* _ = Lwt_log.info "Building unet" in
@@ -84,7 +84,11 @@ let run_stable_diffusion
     let noise_pred =
       Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
     in
-    Tensor.print noise_pred;
+    let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
+    let noise_pred_uncond = noise_pred.(0) in
+    let noise_pred_text = noise_pred.(1) in
+    let _noise_pred = Tensor.(noise_pred_uncond + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale)) in
+    (* Tensor.print noise_pred; *)
     Lwt.return ())
 ;;
 

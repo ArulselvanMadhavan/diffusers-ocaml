@@ -271,7 +271,8 @@ module UNet2DConditionModel = struct
       Base.List.fold t.down_blocks ~init:(xs, [ xs ]) ~f:(fun (xs, res_xs) b ->
         let xs, r_xs =
           match b with
-          | UNetDownBlock.Basic b -> DownBlock2D.forward b xs (Some emb)
+          | UNetDownBlock.Basic b ->
+            DownBlock2D.forward b xs (Some emb)
           | UNetDownBlock.CrossAttn b ->
             CrossAttnDownBlock2D.forward b xs (Some emb) (Some encoder_hidden_states)
         in
