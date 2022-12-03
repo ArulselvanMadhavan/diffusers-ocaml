@@ -672,7 +672,8 @@ module CrossAttnUpBlock2D = struct
     let attentions = Array.of_list t.attentions in
     let xs =
       Base.List.foldi t.upblock.resnets ~init:xs ~f:(fun index xs resnet ->
-        let xs = Tensor.cat [ xs; res_xs.(Array.length res_xs - index - 1) ] ~dim:1 in
+        let xs2 = res_xs.(Array.length res_xs - index - 1) in
+        let xs = Tensor.cat [ xs; xs2 ] ~dim:1 in
         let xs = Resnet.ResnetBlock2D.forward resnet xs temb in
         Attention.SpatialTransformer.forward attentions.(index) xs encoder_hidden_states)
     in

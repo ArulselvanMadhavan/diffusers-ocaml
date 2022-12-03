@@ -277,6 +277,7 @@ module UNet2DConditionModel = struct
         in
         xs, Base.List.append res_xs r_xs)
     in
+    (* mid *)
     let xs =
       UNetMidBlock2DCrossAttn.forward
         t.mid_block
@@ -284,16 +285,21 @@ module UNet2DConditionModel = struct
         (Some emb)
         (Some encoder_hidden_states)
     in
-    let xs, _upsample_size =
-      Base.List.foldi t.up_blocks ~init:(xs, None) ~f:(fun i (xs, upsample_size) b ->
+    (* up *)
+    let xs, _upsample_size, _down_block_res_xs =
+      Base.List.foldi
+        t.up_blocks
+        ~init:(xs, None, down_block_res_xs)
+        ~f:(fun i (xs, upsample_size, down_block_res_xs) b ->
         let n_resnets =
           match b with
           | UNetUpBlock.Basic b -> List.length b.resnets
           | UNetUpBlock.CrossAttn b -> List.length b.upblock.resnets
         in
-        let res_xs =
-          Base.List.drop down_block_res_xs (List.length down_block_res_xs - n_resnets)
-        in
+        (* split off *)
+        let split = List.length down_block_res_xs - n_resnets in
+        let res_xs = Base.List.drop down_block_res_xs split in
+        let down_block_res_xs = Base.List.take down_block_res_xs split in
         let upsample_size =
           if i < n_blocks - 1 && forward_upsample_size
           then (
@@ -314,7 +320,7 @@ module UNet2DConditionModel = struct
               upsample_size
               (Some encoder_hidden_states)
         in
-        xs, upsample_size)
+        xs, upsample_size, down_block_res_xs)
     in
     let xs = Group_norm.forward t.conv_norm_out xs in
     let xs = Tensor.silu xs in

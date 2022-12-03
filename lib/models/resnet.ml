@@ -82,7 +82,7 @@ module ResnetBlock2D = struct
              Var_store.(vs / "conv_shortcut")
              ~ksize:(1, 1)
              ~stride:(1, 1)
-             ~padding:(1, 1)
+             ~padding:(0, 0)
              ~input_dim:in_channels
              out_channels)
       else None

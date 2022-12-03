@@ -62,7 +62,7 @@ let run_stable_diffusion
     in
     let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
     let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
-    let _text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
+    let text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
     let* _ = Lwt_log.info "Building VAE" in
     let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let* _ = Lwt_log.info "Building unet" in
@@ -81,7 +81,6 @@ let run_stable_diffusion
     in
     let* _ = Lwt_log.info_f "Timestep %d/%d" 0 30 in
     let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
-    let* _ = Lwt_log.info_f "Latent shape:%s" (Tensor.shape_str latent_model_input) in
     let noise_pred =
       Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
     in
