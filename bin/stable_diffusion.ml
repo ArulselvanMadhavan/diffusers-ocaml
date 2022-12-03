@@ -2,6 +2,10 @@ open Torch
 open Diffusers_transformers
 module DPipelines = Diffusers_pipelines
 
+let height = 512
+let width = 512
+let _guidance_scale = 7.5
+
 let log_device d =
   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
 ;;
@@ -33,6 +37,7 @@ let run_stable_diffusion
   sliced_attention_size
   =
   let open Lwt.Syntax in
+  let open Diffusers_models in
   set_logger ();
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
@@ -50,22 +55,39 @@ let run_stable_diffusion
   let tokens = array_to_tensor tokens clip_device in
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
   let uncond_tokens = array_to_tensor uncond_tokens clip_device in
-  let* _ = Lwt_log.info "Building clip transformer" in
-  let text_model =
-    DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
-  in
-  let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
-  let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
-  let _text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
-  let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
-  let _unet =
-    DPipelines.Stable_diffusion.build_unet
-      ~unet_weights
-      ~device:unet_device
-      4
-      sliced_attention_size
-  in
-  Lwt.return ()
+  Torch.Tensor.no_grad (fun () ->
+    let* _ = Lwt_log.info "Building clip transformer" in
+    let text_model =
+      DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
+    in
+    let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
+    let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
+    let _text_embeddings = Tensor.cat [ text_embeddings; uncond_embeddings ] ~dim:0 in
+    let* _ = Lwt_log.info "Building VAE" in
+    let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+    let* _ = Lwt_log.info "Building unet" in
+    let unet =
+      DPipelines.Stable_diffusion.build_unet
+        ~unet_weights
+        ~device:unet_device
+        4
+        sliced_attention_size
+    in
+    let bsize = 1 in
+    let seed = 32 in
+    Torch_core.Wrapper.manual_seed seed;
+    let latents =
+      Tensor.randn [ bsize; 4; height / 8; width / 8 ] ~kind:(T Float) ~device:unet_device
+    in
+    let* _ = Lwt_log.info_f "Timestep %d/%d" 0 30 in
+    let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
+    let* _ = Lwt_log.info_f "Latent shape:%s" (Tensor.shape_str latent_model_input) in
+    let noise_pred =
+      Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
+    in
+    Tensor.print noise_pred;
+    (* Torch_core.Wrapper.manual_seed (seed + id *)
+    Lwt.return ())
 ;;
 
 let exec_stable_diff
@@ -125,7 +147,10 @@ let () =
     Arg.(
       value
       & opt (some int) None
-      & info ["sliced_attention_size"] ~docv:"SLICED_ATTENTION_SIZE" ~doc:"sliced attention size")
+      & info
+          [ "sliced_attention_size" ]
+          ~docv:"SLICED_ATTENTION_SIZE"
+          ~doc:"sliced attention size")
   in
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in

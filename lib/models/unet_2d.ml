@@ -277,6 +277,7 @@ module UNet2DConditionModel = struct
         in
         xs, Base.List.append res_xs r_xs)
     in
+    Printf.printf "conv_in shape:%s\n" (Tensor.shape_str xs);
     let xs =
       UNetMidBlock2DCrossAttn.forward
         t.mid_block

@@ -13,8 +13,9 @@ module GeGlu = struct
     let hidden_states_and_gate =
       Tensor.chunk hidden_states_and_gate ~chunks:2 ~dim:(-1)
     in
-    let hsg0 = List.hd hidden_states_and_gate in
-    let hsg1 = List.hd (Base.List.drop hidden_states_and_gate 1) in
+    let hidden_states_and_gate = Array.of_list hidden_states_and_gate in
+    let hsg0 = hidden_states_and_gate.(0) in
+    let hsg1 = hidden_states_and_gate.(1) in
     let hsg1 = Tensor.gelu hsg1 ~approximate:"none" in
     Tensor.mul hsg0 hsg1
   ;;
@@ -73,11 +74,9 @@ module CrossAttention = struct
 
   let reshape_heads_to_batch_dim t xs =
     let batch_size, seq_len, dim = Tensor.shape3_exn xs in
-    let xs =
-      Tensor.reshape xs ~shape:[ batch_size / t.heads; seq_len; t.heads; dim / t.heads ]
-    in
+    let xs = Tensor.reshape xs ~shape:[ batch_size; seq_len; t.heads; dim / t.heads ] in
     let xs = Tensor.permute xs ~dims:[ 0; 2; 1; 3 ] in
-    Tensor.reshape xs ~shape:[ batch_size / t.heads; seq_len; dim * t.heads ]
+    Tensor.reshape xs ~shape:[ batch_size * t.heads; seq_len; dim * t.heads ]
   ;;
 
   let reshape_batch_dim_to_heads t xs =
@@ -150,10 +149,10 @@ module CrossAttention = struct
     let key = reshape_heads_to_batch_dim t key in
     let value = reshape_heads_to_batch_dim t value in
     Option.fold
-      ~none:(attention t query key value)
+      ~none:(Layer.forward t.to_out (attention t query key value))
       ~some:(fun slice_size ->
         if List.hd (Tensor.size query) / slice_size <= 1
-        then attention t query key value
+        then Layer.forward t.to_out (attention t query key value)
         else
           Layer.forward
             t.to_out
@@ -199,15 +198,13 @@ module BasicTransformerBlock = struct
   ;;
 
   let forward t xs context =
-    let xs1 = Layer.forward t.norm1 xs in
-    let xs1 = CrossAttention.forward t.attn1 xs1 None in
-    let xs = Tensor.add xs1 xs in
-    let xs1 = Layer.forward t.norm2 xs in
-    let xs1 = CrossAttention.forward t.attn2 xs1 context in
-    let xs = Tensor.add xs1 xs in
-    let xs1 = Layer.forward t.norm3 xs in
-    let xs1 = Feedforward.forward t.ff xs1 in
-    Tensor.add xs1 xs
+    let xs =
+      Tensor.(CrossAttention.forward t.attn1 (Layer.forward t.norm1 xs) None + xs)
+    in
+    let xs =
+      Tensor.(CrossAttention.forward t.attn2 (Layer.forward t.norm2 xs) context + xs)
+    in
+    Tensor.(Feedforward.forward t.ff (Layer.forward t.norm3 xs) + xs)
   ;;
 end
 
@@ -369,8 +366,10 @@ module AttentionBlock = struct
     let xs = Tensor.permute xs ~dims:[ 0; 2; 1; 3 ] in
     let xs = Tensor.contiguous xs in
     let new_xs_shape = Tensor.shape xs in
-    let new_xs_shape = Base.List.drop new_xs_shape 2 in
+    let new_xs_shape = Base.List.drop_last_exn new_xs_shape in
+    let new_xs_shape = Base.List.drop_last_exn new_xs_shape in
     let new_xs_shape = Base.List.append new_xs_shape [ t.channels ] in
+    
     let xs = Tensor.view xs ~size:new_xs_shape in
     let xs = Layer.forward t.proj_attn xs in
     let xs = Tensor.transpose xs ~dim0:(-1) ~dim1:(-2) in
