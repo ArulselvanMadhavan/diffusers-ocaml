@@ -6,8 +6,8 @@ let height = 512
 let width = 512
 let guidance_scale = 7.5
 
-let log_device d =
-  Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug)
+(* let log_device d = *)
+(*   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug) *)
 ;;
 
 let set_logger () =
@@ -28,6 +28,14 @@ let array_to_tensor tokens device =
   Tensor.view tokens ~size:[ 1; -1 ]
 ;;
 
+let gen_tokens prompt clip_device =
+  let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
+  let tokens = Clip.Tokenizer.encode tokenizer prompt in
+  let tokens = array_to_tensor tokens clip_device in
+  let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
+  let uncond_tokens = array_to_tensor uncond_tokens clip_device in
+  tokens, uncond_tokens
+  
 let run_stable_diffusion
   prompt
   cpu
@@ -52,19 +60,14 @@ let run_stable_diffusion
   let clip_device = cpu_or_cuda "clip" in
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
-  let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
+  (* let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in *)
   let scheduler =
     Diffusers_schedulers.Ddim.DDimScheduler.make
       n_steps
       1000
       (Diffusers_schedulers.Ddim.DDIMSchedulerConfig.default ())
   in
-  let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
-  let* _ = Lwt_log.info_f "Running with prompt:%s" prompt in
-  let tokens = Clip.Tokenizer.encode tokenizer prompt in
-  let tokens = array_to_tensor tokens clip_device in
-  let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
-  let uncond_tokens = array_to_tensor uncond_tokens clip_device in
+  let tokens, uncond_tokens = gen_tokens prompt clip_device in
   Torch.Tensor.no_grad (fun () ->
     let* _ = Lwt_log.info "Building clip transformer" in
     let text_model =
@@ -88,7 +91,6 @@ let run_stable_diffusion
       Tensor.randn [ bsize; 4; height / 8; width / 8 ] ~kind:(T Float) ~device:unet_device
     in
     let latents = ref latents in
-    (* let timestep_index = 0 in *)
     for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
       Caml.Gc.full_major ();
       let timestep = scheduler.timesteps.(timestep_index) in
@@ -98,11 +100,7 @@ let run_stable_diffusion
       let noise_pred =
         Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
       in
-      Printf.printf "unet stage\n";
-      Stdio.Out_channel.flush stdout;
       let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-      (* let noise_pred_uncond = noise_pred.(0) in *)
-      (* let noise_pred_text = noise_pred.(1) in *)
       let noise_pred =
         Tensor.(
           noise_pred.(0)

@@ -674,8 +674,6 @@ module CrossAttnUpBlock2D = struct
     let xs = ref xs in
     for index = 0 to Array.length t.upblock.resnets - 1 do
       Caml.Gc.full_major ();
-      Printf.printf "%d)Crossup\n" index;
-      Stdio.Out_channel.flush stdout;
       let resnet = t.upblock.resnets.(index) in
       let xs2 = res_xs.(Array.length res_xs - index - 1) in
       xs := Tensor.cat [ !xs; xs2 ] ~dim:1;

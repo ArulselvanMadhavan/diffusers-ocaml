@@ -225,7 +225,7 @@ module SpatialTransformer = struct
   type t =
     { norm : Group_norm.t
     ; proj_in : Nn.t
-    ; transformer_blocks : BasicTransformerBlock.t list
+    ; transformer_blocks : BasicTransformerBlock.t array
     ; proj_out : Nn.t (* ; config : SpatialTransformerConfig.t *)
     }
 
@@ -251,7 +251,7 @@ module SpatialTransformer = struct
     in
     let vs_tb = Var_store.(vs / "transformer_blocks") in
     let transformer_blocks =
-      List.init config.depth (fun index ->
+      Array.init config.depth (fun index ->
         BasicTransformerBlock.make
           Var_store.(vs_tb // index)
           inner_dim
@@ -281,13 +281,14 @@ module SpatialTransformer = struct
     let inner_dim = inner_dim.(1) in
     let xs = Tensor.permute xs ~dims:[ 0; 2; 3; 1 ] in
     let xs = Tensor.view xs ~size:[ batch; height * weight; inner_dim ] in
-    let xs =
-      List.fold_left
-        (fun acc tb -> BasicTransformerBlock.forward tb acc context)
-        xs
-        t.transformer_blocks
-    in
-    let xs = Tensor.view xs ~size:[ batch; height; weight; inner_dim ] in
+    let xs = ref xs in
+    for index = 0 to Array.length t.transformer_blocks - 1 do
+      Caml.Gc.full_major ();
+      let tb = t.transformer_blocks.(index) in
+      xs := BasicTransformerBlock.forward tb !xs context;
+      Caml.Gc.full_major ()
+    done;
+    let xs = Tensor.view !xs ~size:[ batch; height; weight; inner_dim ] in
     let xs = Tensor.permute xs ~dims:[ 0; 3; 1; 2 ] in
     Tensor.add (Layer.forward t.proj_out xs) residual
   ;;
