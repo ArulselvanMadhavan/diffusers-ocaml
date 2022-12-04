@@ -147,7 +147,7 @@ end
 
 module UpBlock2D : sig
   type t =
-    { resnets : Resnet.ResnetBlock2D.t list
+    { resnets : Resnet.ResnetBlock2D.t array
     ; upsampler : Upsample2D.t option
     }
 

@@ -553,7 +553,7 @@ end
 
 module UpBlock2D = struct
   type t =
-    { resnets : Resnet.ResnetBlock2D.t list
+    { resnets : Resnet.ResnetBlock2D.t array
     ; upsampler : Upsample2D.t option (* ; config : UpBlock2DConfig.t *)
     }
 
@@ -576,7 +576,7 @@ module UpBlock2D = struct
       }
     in
     let resnets =
-      List.init config.num_layers (fun i ->
+      Array.init config.num_layers (fun i ->
         let res_skip_channels =
           if i == config.num_layers - 1 then in_channels else out_channels
         in
@@ -596,7 +596,7 @@ module UpBlock2D = struct
 
   let forward t xs res_xs temb upsample_size =
     let xs =
-      Base.List.foldi t.resnets ~init:xs ~f:(fun index xs resnet ->
+      Base.Array.foldi t.resnets ~init:xs ~f:(fun index xs resnet ->
         let xs = Tensor.cat ~dim:1 [ xs; res_xs.(Array.length res_xs - index - 1) ] in
         Resnet.ResnetBlock2D.forward resnet xs temb)
     in
@@ -671,14 +671,22 @@ module CrossAttnUpBlock2D = struct
 
   let forward t xs res_xs temb upsample_size encoder_hidden_states =
     let attentions = Array.of_list t.attentions in
-    let xs =
-      Base.List.foldi t.upblock.resnets ~init:xs ~f:(fun index xs resnet ->
-        let xs2 = res_xs.(Array.length res_xs - index - 1) in
-        let xs = Tensor.cat [ xs; xs2 ] ~dim:1 in
-        let xs = Resnet.ResnetBlock2D.forward resnet xs temb in
-        Attention.SpatialTransformer.forward attentions.(index) xs encoder_hidden_states)
-    in
-    Base.Option.fold t.upblock.upsampler ~init:xs ~f:(fun xs upsampler ->
+    let xs = ref xs in
+    for index = 0 to Array.length t.upblock.resnets - 1 do
+      Caml.Gc.full_major ();
+      Printf.printf "%d)Crossup\n" index;
+      Stdio.Out_channel.flush stdout;
+      let resnet = t.upblock.resnets.(index) in
+      let xs2 = res_xs.(Array.length res_xs - index - 1) in
+      xs := Tensor.cat [ !xs; xs2 ] ~dim:1;
+      xs := Resnet.ResnetBlock2D.forward resnet !xs temb;
+      xs
+        := Attention.SpatialTransformer.forward
+             attentions.(index)
+             !xs
+             encoder_hidden_states
+    done;
+    Base.Option.fold t.upblock.upsampler ~init:!xs ~f:(fun xs upsampler ->
       Upsample2D.forward upsampler xs upsample_size)
   ;;
 end

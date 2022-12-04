@@ -40,9 +40,9 @@ let run_stable_diffusion
   let open Diffusers_models in
   set_logger ();
   let n_steps = 30 in
-  let num_samples = 1 in
+  let _num_samples = 1 in
   let seed = 32 in
-  let final_image = "sd_final.png" in
+  let _final_image = "sd_final.png" in
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
     if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
@@ -74,8 +74,6 @@ let run_stable_diffusion
     let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
     let text_embeddings = Tensor.cat [ uncond_embeddings; text_embeddings ] ~dim:0 in
     let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
-    let* _ = Lwt_log.info "Building VAE" in
-    let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let* _ = Lwt_log.info "Building unet" in
     let unet =
       DPipelines.Stable_diffusion.build_unet
@@ -89,40 +87,39 @@ let run_stable_diffusion
     let latents =
       Tensor.randn [ bsize; 4; height / 8; width / 8 ] ~kind:(T Float) ~device:unet_device
     in
-    let latents =
-      Base.Array.foldi
-        scheduler.timesteps
-        ~init:latents
-        ~f:(fun timestep_index latents timestep ->
-        Printf.printf "Timestep %d/%d" timestep_index n_steps;
-        let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
-        let noise_pred =
-          Unet_2d.UNet2DConditionModel.forward
-            unet
-            latent_model_input
-            990.
-            text_embeddings
-        in
-        let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-        let noise_pred_uncond = noise_pred.(0) in
-        let noise_pred_text = noise_pred.(1) in
-        let noise_pred =
-          Tensor.(
-            noise_pred_uncond
-            + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale))
-        in
-        let latents =
-          Diffusers_schedulers.Ddim.DDimScheduler.step
-            scheduler
-            noise_pred
-            timestep
-            latents
-        in
-        Caml.Gc.full_major ();
-        latents)
-    in
+    let latents = ref latents in
+    (* let timestep_index = 0 in *)
+    for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
+      Caml.Gc.full_major ();
+      let timestep = scheduler.timesteps.(timestep_index) in
+      Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
+      Stdio.Out_channel.flush stdout;
+      let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
+      let noise_pred =
+        Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
+      in
+      Printf.printf "unet stage\n";
+      Stdio.Out_channel.flush stdout;
+      let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
+      (* let noise_pred_uncond = noise_pred.(0) in *)
+      (* let noise_pred_text = noise_pred.(1) in *)
+      let noise_pred =
+        Tensor.(
+          noise_pred.(0)
+          + mul_scalar (noise_pred.(1) - noise_pred.(0)) (Scalar.f guidance_scale))
+      in
+      latents
+        := Diffusers_schedulers.Ddim.DDimScheduler.step
+             scheduler
+             noise_pred
+             timestep
+             !latents;
+      Caml.Gc.full_major ()
+    done;
     let* _ = Lwt_log.info_f "Generating final for sample %d/%d" 1 1 in
-    let latents = Tensor.to_device ~device:vae_device latents in
+    let latents = Tensor.to_device ~device:vae_device !latents in
+    let* _ = Lwt_log.info "Building VAE" in
+    let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let image =
       Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
     in
