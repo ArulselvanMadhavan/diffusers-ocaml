@@ -268,8 +268,6 @@ module UNet2DConditionModel = struct
     let emb = Embeddings.Timesteps.forward t.time_proj emb in
     let emb = Embeddings.TimestepEmbedding.forward t.time_embedding emb in
     let xs = Layer.forward t.conv_in xs in
-    Printf.printf "down_block_res_xs stage\n";
-    Stdio.Out_channel.flush stdout;
     let xs, down_block_res_xs =
       Base.List.fold t.down_blocks ~init:(xs, [ xs ]) ~f:(fun (xs, res_xs) b ->
         let xs, r_xs =
@@ -280,9 +278,6 @@ module UNet2DConditionModel = struct
         in
         xs, Base.List.append res_xs r_xs)
     in
-    Caml.Gc.full_major ();
-    Printf.printf "mid_block_res_xs stage\n";
-    Stdio.Out_channel.flush stdout;
     (* mid *)
     let xs =
       UNetMidBlock2DCrossAttn.forward
@@ -292,9 +287,6 @@ module UNet2DConditionModel = struct
         (Some encoder_hidden_states)
     in
     (* up *)
-    Caml.Gc.full_major ();
-    Printf.printf "up_block_res_xs stage\n";
-    Stdio.Out_channel.flush stdout;
     let upsample_size = ref None in
     let down_block_res_xs = ref down_block_res_xs in
     let xs = ref xs in
@@ -315,24 +307,19 @@ module UNet2DConditionModel = struct
              let _, _, h, w = Tensor.shape4_exn (Base.List.last_exn !down_block_res_xs) in
              Some (h, w))
            else !upsample_size;
-      (xs
-         := match b with
-            | UNetUpBlock.Basic b ->
-              UpBlock2D.forward b !xs (Array.of_list res_xs) (Some emb) !upsample_size
-            | UNetUpBlock.CrossAttn b ->
-              CrossAttnUpBlock2D.forward
-                b
-                !xs
-                (Array.of_list res_xs)
-                (Some emb)
-                !upsample_size
-                (Some encoder_hidden_states));
-      Caml.Gc.full_major ();
-      Printf.printf "%d)done\n" i;
-      Stdio.Out_channel.flush stdout
+      xs
+        := match b with
+           | UNetUpBlock.Basic b ->
+             UpBlock2D.forward b !xs (Array.of_list res_xs) (Some emb) !upsample_size
+           | UNetUpBlock.CrossAttn b ->
+             CrossAttnUpBlock2D.forward
+               b
+               !xs
+               (Array.of_list res_xs)
+               (Some emb)
+               !upsample_size
+               (Some encoder_hidden_states)
     done;
-    Printf.printf "up_block stage done\n";
-    Stdio.Out_channel.flush stdout;
     let xs = Group_norm.forward t.conv_norm_out !xs in
     let xs = Tensor.silu xs in
     Layer.forward t.conv_out xs

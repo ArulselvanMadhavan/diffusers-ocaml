@@ -8,4 +8,5 @@
   torch
   diffusers_transformers
   diffusers_pipelines
-  diffusers_schedulers))
+  diffusers_schedulers
+  torch.vision))

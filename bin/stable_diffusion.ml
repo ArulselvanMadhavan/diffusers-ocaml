@@ -8,7 +8,6 @@ let guidance_scale = 7.5
 
 (* let log_device d = *)
 (*   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug) *)
-;;
 
 let set_logger () =
   Lwt_log.default
@@ -35,7 +34,8 @@ let gen_tokens prompt clip_device =
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
   let uncond_tokens = array_to_tensor uncond_tokens clip_device in
   tokens, uncond_tokens
-  
+;;
+
 let run_stable_diffusion
   prompt
   cpu
@@ -43,14 +43,16 @@ let run_stable_diffusion
   vae_weights
   unet_weights
   sliced_attention_size
+  n_steps
+  seed
+  num_samples
   =
-  let open Lwt.Syntax in
   let open Diffusers_models in
   set_logger ();
-  let n_steps = 30 in
-  let _num_samples = 1 in
-  let seed = 32 in
-  let _final_image = "sd_final.png" in
+  let n_steps = Option.value n_steps ~default:30 in
+  let num_samples = Option.value num_samples ~default:1 in
+  let seed = Option.value seed ~default:32 in
+  let final_image = "sd_final.png" in
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
     if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
@@ -69,7 +71,7 @@ let run_stable_diffusion
   in
   let tokens, uncond_tokens = gen_tokens prompt clip_device in
   Torch.Tensor.no_grad (fun () ->
-    let* _ = Lwt_log.info "Building clip transformer" in
+    Printf.printf "Building clip transformer\n";
     let text_model =
       DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
     in
@@ -77,7 +79,7 @@ let run_stable_diffusion
     let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
     let text_embeddings = Tensor.cat [ uncond_embeddings; text_embeddings ] ~dim:0 in
     let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
-    let* _ = Lwt_log.info "Building unet" in
+    Printf.printf "Building unet\n";
     let unet =
       DPipelines.Stable_diffusion.build_unet
         ~unet_weights
@@ -86,74 +88,68 @@ let run_stable_diffusion
         sliced_attention_size
     in
     let bsize = 1 in
-    Torch_core.Wrapper.manual_seed seed;
-    let latents =
-      Tensor.randn [ bsize; 4; height / 8; width / 8 ] ~kind:(T Float) ~device:unet_device
-    in
-    let latents = ref latents in
-    for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
-      Caml.Gc.full_major ();
-      let timestep = scheduler.timesteps.(timestep_index) in
-      Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
-      Stdio.Out_channel.flush stdout;
-      let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
-      let noise_pred =
-        Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
+    for idx = 0 to num_samples - 1 do
+      Torch_core.Wrapper.manual_seed seed;
+      let latents =
+        Tensor.randn
+          [ bsize; 4; height / 8; width / 8 ]
+          ~kind:(T Float)
+          ~device:unet_device
       in
-      let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-      let noise_pred =
-        Tensor.(
-          noise_pred.(0)
-          + mul_scalar (noise_pred.(1) - noise_pred.(0)) (Scalar.f guidance_scale))
+      let latents = ref latents in
+      for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
+        let timestep = scheduler.timesteps.(timestep_index) in
+        Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
+        Stdio.Out_channel.flush stdout;
+        let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
+        let noise_pred =
+          Unet_2d.UNet2DConditionModel.forward
+            unet
+            latent_model_input
+            (Float.of_int timestep)
+            text_embeddings
+        in
+        let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
+        let noise_pred =
+          Tensor.(
+            noise_pred.(0)
+            + mul_scalar (noise_pred.(1) - noise_pred.(0)) (Scalar.f guidance_scale))
+        in
+        latents
+          := Diffusers_schedulers.Ddim.DDimScheduler.step
+               scheduler
+               noise_pred
+               timestep
+               !latents;
+        Caml.Gc.full_major ()
+      done;
+      Printf.printf "Generating final for sample %d/%d\n" 1 1;
+      let latents = Tensor.to_device ~device:vae_device !latents in
+      Printf.printf "Building VAE\n";
+      let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+      let image =
+        Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
       in
-      latents
-        := Diffusers_schedulers.Ddim.DDimScheduler.step
-             scheduler
-             noise_pred
-             timestep
-             !latents;
-      Caml.Gc.full_major ()
-    done;
-    let* _ = Lwt_log.info_f "Generating final for sample %d/%d" 1 1 in
-    let latents = Tensor.to_device ~device:vae_device !latents in
-    let* _ = Lwt_log.info "Building VAE" in
-    let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
-    let image =
-      Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
-    in
-    let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
-    let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
-    let image = Tensor.to_device image ~device:Device.Cpu in
-    let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
-    let _image = Tensor.to_kind image ~kind:(T Uint8) in
-    (* let final_image = if num_samples > 1 then *)
-    (*     match Base.String.rsplit2 ~on:'.' with *)
-    (*     | None -> Printf.sprintf "%s.%s.png" final_image (idx + 1) *)
-    (*     | Some (filename_no_extension, extension) -> *)
-    (*       Printf.sprintf "%s.%s.%s" filename_no_extension (idx + 1) extension *)
-    (*   else *)
-    (*     final_image *)
-    (*       in *)
-    (* let final_image = if num *)
-    Lwt.return ())
-;;
-
-let exec_stable_diff
-  prompt
-  cpu
-  clip_weights
-  vae_weights
-  unet_weights
-  sliced_attention_size
-  =
-  Lwt_main.run
-    (run_stable_diffusion
-       prompt
-       cpu
-       clip_weights
-       vae_weights
-       unet_weights
-       sliced_attention_size)
+      let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
+      let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
+      let image = Tensor.to_device image ~device:Device.Cpu in
+      let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
+      let image = Tensor.to_kind image ~kind:(T Uint8) in
+      let final_image =
+        if num_samples > 1
+        then (
+          match Base.String.rsplit2 ~on:'.' final_image with
+          | None -> Printf.sprintf "%s.%s.png" final_image (Int.to_string (idx + 1))
+          | Some (filename_no_extension, extension) ->
+            Printf.sprintf
+              "%s.%s.%s"
+              filename_no_extension
+              (Int.to_string (idx + 1))
+              extension)
+        else final_image
+      in
+      Torch_vision.Image.write_image image ~filename:final_image
+    done)
 ;;
 
 let () =
@@ -200,17 +196,38 @@ let () =
           ~docv:"SLICED_ATTENTION_SIZE"
           ~doc:"sliced attention size")
   in
+  let n_steps =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "n_steps" ] ~docv:"N_STEPS" ~doc:"number of timesteps")
+  in
+  let seed =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "seed" ] ~docv:"SEED" ~doc:"random seed to be used for generation")
+  in
+  let num_samples =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "num_samples" ] ~docv:"NUM_SAMPLES" ~doc:"Number of samples to generate")
+  in
   let doc = "Stable_diffusion: Generate image from text" in
   let man = [ `S "DESCRIPTION"; `P "Turn text into image" ] in
   let cmd =
     ( Term.(
-        const exec_stable_diff
+        const run_stable_diffusion
         $ prompt
         $ cpu
         $ clip_weights
         $ vae_weights
         $ unet_weights
-        $ sliced_attention_size)
+        $ sliced_attention_size
+        $ n_steps
+        $ seed
+        $ num_samples)
     , Cmd.info "generate" ~sdocs:"" ~doc ~man )
   in
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in
