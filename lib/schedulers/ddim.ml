@@ -37,21 +37,20 @@ module DDimScheduler = struct
     let step_ratio = train_timesteps / inference_steps in
     let timesteps = Array.init (inference_steps + 1) (fun s -> step_ratio * s) in
     Base.Array.rev_inplace timesteps;
+    let linspace =
+      Tensor.linspace
+        ~start:(Scalar.f (Float.sqrt config.beta_start))
+        ~end_:(Scalar.f (Float.sqrt config.beta_end))
+        ~steps:train_timesteps
+        ~options:(T Float, Device.Cpu)
+    in
+    Tensor.print linspace;
     let betas =
       match config.beta_schedule with
       | BetaSchedule.ScaledLinear ->
-        Tensor.square
-          (Tensor.linspace
-             ~start:(Scalar.f config.beta_start)
-             ~end_:(Scalar.f config.beta_end)
-             ~steps:train_timesteps
-             ~options:(T Float, Device.Cpu))
+        Tensor.square linspace
       | BetaSchedule.Linear ->
-        Tensor.linspace
-          ~start:(Scalar.f config.beta_start)
-          ~end_:(Scalar.f config.beta_end)
-          ~steps:train_timesteps
-          ~options:(T Float, Device.Cpu)
+        linspace
     in
     let alphas = Tensor.(add_scalar (neg betas) (Scalar.f 1.0)) in
     let alphas_cumprod = Tensor.cumprod ~dim:0 ~dtype:(T Double) alphas in
@@ -73,6 +72,7 @@ module DDimScheduler = struct
           (sample - mul_scalar model_output (Scalar.f (Float.sqrt beta_prod_t)))
           (Scalar.f (Float.sqrt alpha_prod_t)))
     in
+    (* Tensor.print pred_original_sample; *)
     let variance =
       beta_prod_t_prev /. beta_prod_t *. (1. -. (alpha_prod_t /. alpha_prod_t_prev))
     in

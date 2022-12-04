@@ -100,10 +100,22 @@ let run_stable_diffusion
         noise_pred_uncond
         + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale))
     in
-    let timestep = 1 in
-    let _dims =
+    let timestep = 990 in
+    let _latents =
       Diffusers_schedulers.Ddim.DDimScheduler.step scheduler noise_pred timestep latents
     in
+    let* _ = Lwt_log.info_f "Generating final for sample %d/%d" 1 1 in
+    Caml.Gc.full_major ();
+    (* let latents = Tensor.to_device ~device:vae_device latents in *)
+    (* let image = *)
+    (*   Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215)) *)
+    (* in *)
+    (* let image = Tensor.div_scalar image (Scalar.f (2. +. 0.5)) in *)
+    (* let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in *)
+    (* let image = Tensor.to_device image ~device:Device.Cpu in *)
+    (* let image = Tensor.(mul_scalar image (Scalar.f 255.)) in *)
+    (* let _image = Tensor.to_kind image ~kind:(T Uint8) in *)
+    (* let final_image = if num *)
     Lwt.return ())
 ;;
 
