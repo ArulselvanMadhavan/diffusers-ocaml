@@ -17,7 +17,6 @@ let guidance_scale = 7.5
 (*          ~channel:Lwt_io.stdout *)
 (*          (); *)
 (*   Lwt_log.add_rule "*" Lwt_log.Info *)
-;;
 
 let array_to_tensor tokens device =
   let tokens =
@@ -34,6 +33,36 @@ let gen_tokens prompt clip_device =
   let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
   let uncond_tokens = array_to_tensor uncond_tokens clip_device in
   tokens, uncond_tokens
+;;
+
+let build_image idx num_samples vae_device vae_weights latents final_image =
+  let open Diffusers_models in
+  Printf.printf "Generating final for sample %d/%d\n" (idx + 1) num_samples;
+  let latents = Tensor.to_device ~device:vae_device latents in
+  Printf.printf "Building VAE\n";
+  let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+  let image =
+    Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
+  in
+  let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
+  let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
+  let image = Tensor.to_device image ~device:Device.Cpu in
+  let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
+  let image = Tensor.to_kind image ~kind:(T Uint8) in
+  let final_image =
+    if num_samples > 1
+    then (
+      match Base.String.rsplit2 ~on:'.' final_image with
+      | None -> Printf.sprintf "%s.%s.png" final_image (Int.to_string (idx + 1))
+      | Some (filename_no_extension, extension) ->
+        Printf.sprintf
+          "%s.%s.%s"
+          filename_no_extension
+          (Int.to_string (idx + 1))
+          extension)
+    else final_image
+  in
+  Torch_vision.Image.write_image image ~filename:final_image
 ;;
 
 let run_stable_diffusion
@@ -55,14 +84,16 @@ let run_stable_diffusion
   let final_image = "sd_final.png" in
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
-    if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
+    if Base.List.exists cpu ~f:(fun c -> c = "all" || c = name)
     then Device.Cpu
     else cuda_device
   in
   let clip_device = cpu_or_cuda "clip" in
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
-  List.iter (fun d -> Printf.printf "%b\n" (Device.is_cuda d)) [ clip_device; vae_device; unet_device ];
+  List.iter
+    (fun d -> Printf.printf "%b\n" (Device.is_cuda d))
+    [ clip_device; vae_device; unet_device ];
   let scheduler =
     Diffusers_schedulers.Ddim.DDimScheduler.make
       n_steps
@@ -121,34 +152,8 @@ let run_stable_diffusion
                noise_pred
                timestep
                !latents;
-        Caml.Gc.full_major ()
       done;
-      Printf.printf "Generating final for sample %d/%d\n" (idx + 1) num_samples;
-      let latents = Tensor.to_device ~device:vae_device !latents in
-      Printf.printf "Building VAE\n";
-      let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
-      let image =
-        Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
-      in
-      let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
-      let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
-      let image = Tensor.to_device image ~device:Device.Cpu in
-      let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
-      let image = Tensor.to_kind image ~kind:(T Uint8) in
-      let final_image =
-        if num_samples > 1
-        then (
-          match Base.String.rsplit2 ~on:'.' final_image with
-          | None -> Printf.sprintf "%s.%s.png" final_image (Int.to_string (idx + 1))
-          | Some (filename_no_extension, extension) ->
-            Printf.sprintf
-              "%s.%s.%s"
-              filename_no_extension
-              (Int.to_string (idx + 1))
-              extension)
-        else final_image
-      in
-      Torch_vision.Image.write_image image ~filename:final_image
+      build_image idx num_samples vae_device vae_weights !latents final_image
     done)
 ;;
 

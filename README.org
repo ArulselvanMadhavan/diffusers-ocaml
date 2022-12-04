@@ -1,0 +1,37 @@
+* Diffusers-OCaml: A Diffusers API in OCaml
+
+This work is a port of the diffusers-rs library written in Rust. 
+
+** Stable-Diffusion
+*** How to run?
+    - Download weights and save it data directory. For instructions
+      on how to do this, refer [difffusers-rs-docs](https://github.com/LaurentMazare/diffusers-rs#converting-the-original-weight-files)
+    - Once you have ".ot" files, you are ready to run stable
+      diffusion
+    - I have found that placing unet and clip on GPU, and placing vae
+      on cpu works the best for my GPU. Here is the command that does that. 
+      #+begin_src bash
+dune exec stable_diffusion -- generate "lighthouse at dark" "vae" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
+      #+end_src
+    - To run all models in CPU
+#+begin_src bash
+dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
+#+end_src
+    - To generate more than 1 sample, use the num_samples parameter
+      #+begin_src bash
+dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot" --num_samples=2
+      #+end_src
+
+*** Sample generated images
+![rusty robot holding a torch](media/sd.final.2.png)
+![lighthouse at dark](lighthouse.png)
+*** Performance
+On 8GB Nvidia GeForce GTX 1070 Mobile GPU, it takes about 27 seconds to
+generate an image. Measurements were done on a 12 CPU Intel(R)
+Core(TM) i7-8700K CPU @ 3.70GHz. Running all the steps in CPU takes
+little more than three minutes.
+```bash
+real    0m25.110s
+user    0m39.271s
+sys     0m11.518s
+```
