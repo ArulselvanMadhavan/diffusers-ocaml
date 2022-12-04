@@ -89,7 +89,7 @@ let run_stable_diffusion
     in
     let bsize = 1 in
     for idx = 0 to num_samples - 1 do
-      Torch_core.Wrapper.manual_seed seed;
+      Torch_core.Wrapper.manual_seed (seed + idx);
       let latents =
         Tensor.randn
           [ bsize; 4; height / 8; width / 8 ]
@@ -123,7 +123,7 @@ let run_stable_diffusion
                !latents;
         Caml.Gc.full_major ()
       done;
-      Printf.printf "Generating final for sample %d/%d\n" 1 1;
+      Printf.printf "Generating final for sample %d/%d\n" (idx + 1) num_samples;
       let latents = Tensor.to_device ~device:vae_device !latents in
       Printf.printf "Building VAE\n";
       let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
