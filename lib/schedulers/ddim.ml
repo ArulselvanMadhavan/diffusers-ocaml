@@ -68,7 +68,10 @@ module DDimScheduler = struct
     let beta_prod_t = 1. -. alpha_prod_t in
     let beta_prod_t_prev = 1. -. alpha_prod_t_prev in
     let pred_original_sample =
-      Tensor.(div_scalar (sample - mul_scalar model_output (Scalar.f (Float.sqrt beta_prod_t))) (Scalar.f (Float.sqrt alpha_prod_t)))
+      Tensor.(
+        div_scalar
+          (sample - mul_scalar model_output (Scalar.f (Float.sqrt beta_prod_t)))
+          (Scalar.f (Float.sqrt alpha_prod_t)))
     in
     let variance =
       beta_prod_t_prev /. beta_prod_t *. (1. -. (alpha_prod_t /. alpha_prod_t_prev))
@@ -88,5 +91,4 @@ module DDimScheduler = struct
     then Tensor.(prev_sample + mul_scalar (randn_like prev_sample) (Scalar.f std_dev_t))
     else prev_sample
   ;;
-
 end

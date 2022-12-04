@@ -16,7 +16,8 @@ module DDIMSchedulerConfig : sig
 end
 
 module DDimScheduler : sig
-  type t =     { timesteps : int array
+  type t =
+    { timesteps : int array
     ; alphas_cumprod :
         (float, Bigarray.float64_elt, Bigarray.c_layout) Bigarray.Genarray.t
     ; step_ratio : int
