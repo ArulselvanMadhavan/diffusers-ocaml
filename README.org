@@ -23,19 +23,19 @@ This work is a port of the [[https://github.com/LaurentMazare/diffusers-rs/][dif
       #+end_src
 
 *** Sample generated images
-#+CAPTION: rusty robot holding a torch
-#+NAME:   fig:rusty_robot.png
-[[./media/sd_final.2.png]]
 #+CAPTION: lighthouse at dark
 #+NAME:   fig:lighthouse.png
 [[./media/lighthouse.png]]
+#+CAPTION: rusty robot holding a torch
+#+NAME:   fig:rusty_robot.png
+[[./media/sd_final.2.png]]
 *** Performance
 On 8GB Nvidia GeForce GTX 1070 Mobile GPU, it takes about 27 seconds to
 generate an image. Measurements were done on a 12 CPU Intel(R)
 Core(TM) i7-8700K CPU @ 3.70GHz. Running all the steps in CPU takes
 little more than three minutes.
-```bash
+#+begin_src bash
 real    0m25.110s
 user    0m39.271s
 sys     0m11.518s
-```
+#+end_src
