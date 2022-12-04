@@ -1,30 +1,34 @@
 * Diffusers-OCaml: A Diffusers API in OCaml
 
-This work is a port of the diffusers-rs library written in Rust. 
+This work is a port of the [[https://github.com/LaurentMazare/diffusers-rs/][diffusers-rs]] library written in Rust. 
 
 ** Stable-Diffusion
 *** How to run?
     - Download weights and save it data directory. For instructions
-      on how to do this, refer [difffusers-rs-docs](https://github.com/LaurentMazare/diffusers-rs#converting-the-original-weight-files)
+      on how to do this, refer [[https://github.com/LaurentMazare/diffusers-rs#converting-the-original-weight-files][diffusers-rs-docs]]
     - Once you have ".ot" files, you are ready to run stable
       diffusion
     - I have found that placing unet and clip on GPU, and placing vae
       on cpu works the best for my GPU. Here is the command that does that. 
       #+begin_src bash
-dune exec stable_diffusion -- generate "lighthouse at dark" "vae" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
+      dune exec stable_diffusion -- generate "lighthouse at dark" "vae" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
       #+end_src
     - To run all models in CPU
-#+begin_src bash
-dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
-#+end_src
+      #+begin_src bash
+      dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot"
+      #+end_src
     - To generate more than 1 sample, use the num_samples parameter
       #+begin_src bash
-dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot" --num_samples=2
+      dune exec stable_diffusion -- generate "lighthouse at dark" "all" "data/pytorch_model.ot" "data/vae.ot" "data/unet.ot" --num_samples=2
       #+end_src
 
 *** Sample generated images
-![rusty robot holding a torch](media/sd.final.2.png)
-![lighthouse at dark](lighthouse.png)
+#+CAPTION: rusty robot holding a torch
+#+NAME:   fig:rusty_robot.png
+[[./media/sd.final.2.png]]
+#+CAPTION: lighthouse at dark
+#+NAME:   fig:lighthouse.png
+[[./media/lighthouse.png]]
 *** Performance
 On 8GB Nvidia GeForce GTX 1070 Mobile GPU, it takes about 27 seconds to
 generate an image. Measurements were done on a 12 CPU Intel(R)
