@@ -39,6 +39,10 @@ let run_stable_diffusion
   let open Lwt.Syntax in
   let open Diffusers_models in
   set_logger ();
+  let n_steps = 30 in
+  let num_samples = 1 in
+  let seed = 32 in
+  let final_image = "sd_final.png" in
   let cuda_device = Torch.Device.cuda_if_available () in
   let cpu_or_cuda name =
     if Base.List.exists cpu ~f:(fun c -> c == "all" || c == name)
@@ -49,7 +53,6 @@ let run_stable_diffusion
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
   let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
-  let n_steps = 30 in
   let scheduler =
     Diffusers_schedulers.Ddim.DDimScheduler.make
       n_steps
@@ -72,7 +75,7 @@ let run_stable_diffusion
     let text_embeddings = Tensor.cat [ uncond_embeddings; text_embeddings ] ~dim:0 in
     let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
     let* _ = Lwt_log.info "Building VAE" in
-    let _vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+    let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let* _ = Lwt_log.info "Building unet" in
     let unet =
       DPipelines.Stable_diffusion.build_unet
@@ -82,39 +85,60 @@ let run_stable_diffusion
         sliced_attention_size
     in
     let bsize = 1 in
-    let seed = 32 in
     Torch_core.Wrapper.manual_seed seed;
     let latents =
       Tensor.randn [ bsize; 4; height / 8; width / 8 ] ~kind:(T Float) ~device:unet_device
     in
-    let* _ = Lwt_log.info_f "Timestep %d/%d" 0 30 in
-    let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
-    let noise_pred =
-      Unet_2d.UNet2DConditionModel.forward unet latent_model_input 990. text_embeddings
-    in
-    let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-    let noise_pred_uncond = noise_pred.(0) in
-    let noise_pred_text = noise_pred.(1) in
-    let noise_pred =
-      Tensor.(
-        noise_pred_uncond
-        + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale))
-    in
-    let timestep = 990 in
-    let _latents =
-      Diffusers_schedulers.Ddim.DDimScheduler.step scheduler noise_pred timestep latents
+    let latents =
+      Base.Array.foldi
+        scheduler.timesteps
+        ~init:latents
+        ~f:(fun timestep_index latents timestep ->
+        Printf.printf "Timestep %d/%d" timestep_index n_steps;
+        let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
+        let noise_pred =
+          Unet_2d.UNet2DConditionModel.forward
+            unet
+            latent_model_input
+            990.
+            text_embeddings
+        in
+        let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
+        let noise_pred_uncond = noise_pred.(0) in
+        let noise_pred_text = noise_pred.(1) in
+        let noise_pred =
+          Tensor.(
+            noise_pred_uncond
+            + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale))
+        in
+        let latents =
+          Diffusers_schedulers.Ddim.DDimScheduler.step
+            scheduler
+            noise_pred
+            timestep
+            latents
+        in
+        Caml.Gc.full_major ();
+        latents)
     in
     let* _ = Lwt_log.info_f "Generating final for sample %d/%d" 1 1 in
-    Caml.Gc.full_major ();
-    (* let latents = Tensor.to_device ~device:vae_device latents in *)
-    (* let image = *)
-    (*   Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215)) *)
-    (* in *)
-    (* let image = Tensor.div_scalar image (Scalar.f (2. +. 0.5)) in *)
-    (* let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in *)
-    (* let image = Tensor.to_device image ~device:Device.Cpu in *)
-    (* let image = Tensor.(mul_scalar image (Scalar.f 255.)) in *)
-    (* let _image = Tensor.to_kind image ~kind:(T Uint8) in *)
+    let latents = Tensor.to_device ~device:vae_device latents in
+    let image =
+      Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
+    in
+    let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
+    let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
+    let image = Tensor.to_device image ~device:Device.Cpu in
+    let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
+    let _image = Tensor.to_kind image ~kind:(T Uint8) in
+    (* let final_image = if num_samples > 1 then *)
+    (*     match Base.String.rsplit2 ~on:'.' with *)
+    (*     | None -> Printf.sprintf "%s.%s.png" final_image (idx + 1) *)
+    (*     | Some (filename_no_extension, extension) -> *)
+    (*       Printf.sprintf "%s.%s.%s" filename_no_extension (idx + 1) extension *)
+    (*   else *)
+    (*     final_image *)
+    (*       in *)
     (* let final_image = if num *)
     Lwt.return ())
 ;;

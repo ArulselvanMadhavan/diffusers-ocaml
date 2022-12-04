@@ -44,13 +44,10 @@ module DDimScheduler = struct
         ~steps:train_timesteps
         ~options:(T Float, Device.Cpu)
     in
-    Tensor.print linspace;
     let betas =
       match config.beta_schedule with
-      | BetaSchedule.ScaledLinear ->
-        Tensor.square linspace
-      | BetaSchedule.Linear ->
-        linspace
+      | BetaSchedule.ScaledLinear -> Tensor.square linspace
+      | BetaSchedule.Linear -> linspace
     in
     let alphas = Tensor.(add_scalar (neg betas) (Scalar.f 1.0)) in
     let alphas_cumprod = Tensor.cumprod ~dim:0 ~dtype:(T Double) alphas in
