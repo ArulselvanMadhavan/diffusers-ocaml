@@ -9,14 +9,14 @@ let guidance_scale = 7.5
 (* let log_device d = *)
 (*   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug) *)
 
-let set_logger () =
-  Lwt_log.default
-    := Lwt_log.channel
-         ~template:"$(date).$(milliseconds) [$(level)] $(message)"
-         ~close_mode:`Keep
-         ~channel:Lwt_io.stdout
-         ();
-  Lwt_log.add_rule "*" Lwt_log.Info
+(* let set_logger () = *)
+(*   Lwt_log.default *)
+(*     := Lwt_log.channel *)
+(*          ~template:"$(date).$(milliseconds) [$(level)] $(message)" *)
+(*          ~close_mode:`Keep *)
+(*          ~channel:Lwt_io.stdout *)
+(*          (); *)
+(*   Lwt_log.add_rule "*" Lwt_log.Info *)
 ;;
 
 let array_to_tensor tokens device =
@@ -48,7 +48,7 @@ let run_stable_diffusion
   num_samples
   =
   let open Diffusers_models in
-  set_logger ();
+  (* set_logger (); *)
   let n_steps = Option.value n_steps ~default:30 in
   let num_samples = Option.value num_samples ~default:1 in
   let seed = Option.value seed ~default:32 in
@@ -62,7 +62,7 @@ let run_stable_diffusion
   let clip_device = cpu_or_cuda "clip" in
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
-  (* let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in *)
+  List.iter (fun d -> Printf.printf "%b\n" (Device.is_cuda d)) [ clip_device; vae_device; unet_device ];
   let scheduler =
     Diffusers_schedulers.Ddim.DDimScheduler.make
       n_steps
