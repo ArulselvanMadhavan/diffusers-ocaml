@@ -7,4 +7,5 @@
   cmdliner
   torch
   diffusers_transformers
-  diffusers_pipelines))
+  diffusers_pipelines
+  diffusers_schedulers))

@@ -1,0 +1,3 @@
+(library
+ (name diffusers_schedulers)
+ (libraries torch))

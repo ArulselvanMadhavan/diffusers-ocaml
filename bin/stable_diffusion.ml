@@ -49,6 +49,13 @@ let run_stable_diffusion
   let vae_device = cpu_or_cuda "vae" in
   let unet_device = cpu_or_cuda "unet" in
   let* _ = Lwt.all @@ List.map log_device [ clip_device; vae_device; unet_device ] in
+  let n_steps = 30 in
+  let scheduler =
+    Diffusers_schedulers.Ddim.DDimScheduler.make
+      n_steps
+      1000
+      (Diffusers_schedulers.Ddim.DDIMSchedulerConfig.default ())
+  in
   let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
   let* _ = Lwt_log.info_f "Running with prompt:%s" prompt in
   let tokens = Clip.Tokenizer.encode tokenizer prompt in
@@ -87,8 +94,15 @@ let run_stable_diffusion
     let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
     let noise_pred_uncond = noise_pred.(0) in
     let noise_pred_text = noise_pred.(1) in
-    let _noise_pred = Tensor.(noise_pred_uncond + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale)) in
-    (* Tensor.print noise_pred; *)
+    let noise_pred =
+      Tensor.(
+        noise_pred_uncond
+        + mul_scalar (noise_pred_text - noise_pred_uncond) (Scalar.f guidance_scale))
+    in
+    let timestep = 1 in
+    let _dims =
+      Diffusers_schedulers.Ddim.DDimScheduler.step scheduler noise_pred timestep latents
+    in    
     Lwt.return ())
 ;;
 
