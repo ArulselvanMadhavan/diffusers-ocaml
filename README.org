@@ -48,7 +48,7 @@ dune exec img2img -- img2img media/in_img2img.jpg
 - Input image
 #+CAPTION: img2img
 #+NAME:   fig:in_img2img.png
-[[./media/in_img2img.png]]
+[[./media/in_img2img.jpg]]
 - Output image
 #+CAPTION: img2img
 #+NAME:   fig:out_img2img.png
