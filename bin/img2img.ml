@@ -16,7 +16,7 @@ let image_preprocess input_image =
   let image = Tensor.(div_scalar image (Scalar.f 255.)) in
   let image = Tensor.(mul_scalar image (Scalar.f 2.)) in
   let image = Tensor.(add_scalar image (Scalar.i (-1))) in
-    image
+  image
 ;;
 
 let run_img2img
@@ -79,10 +79,14 @@ let run_img2img
         if timestep_index < t_start
         then ()
         else (
-          Printf.printf "Timestep %d/%d|%d|%s\n" timestep_index n_steps timestep (Tensor.shape_str !latents);
+          Printf.printf
+            "Timestep %d/%d|%d|%s\n"
+            timestep_index
+            n_steps
+            timestep
+            (Tensor.shape_str !latents);
           Stdio.Out_channel.flush stdout;
-          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
-        );
+          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler)
       done;
       Utils.build_image idx num_samples vae_device vae !latents final_image
     done;

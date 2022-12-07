@@ -1,4 +1,18 @@
 (executables
+ (public_names inpaint)
+ (names inpaint)
+ (modules inpaint)
+ (libraries
+  diffusers_ocaml
+  diffusers_models
+  cmdliner
+  torch
+  diffusers_transformers
+  diffusers_pipelines
+  diffusers_schedulers
+  torch.vision))
+
+(executables
  (public_names img2img)
  (names img2img)
  (modules img2img)

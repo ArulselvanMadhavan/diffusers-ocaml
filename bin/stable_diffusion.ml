@@ -60,9 +60,14 @@ let run_stable_diffusion
       let latents = ref latents in
       for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
         let timestep = scheduler.timesteps.(timestep_index) in
-        Printf.printf "Timestep %d/%d|%d|%s\n" timestep_index n_steps timestep (Tensor.shape_str !latents);
+        Printf.printf
+          "Timestep %d/%d|%d|%s\n"
+          timestep_index
+          n_steps
+          timestep
+          (Tensor.shape_str !latents);
         Stdio.Out_channel.flush stdout;
-        latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
+        latents := Utils.update_latents !latents unet timestep text_embeddings scheduler
       done;
       Printf.printf "Building VAE\n";
       let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
