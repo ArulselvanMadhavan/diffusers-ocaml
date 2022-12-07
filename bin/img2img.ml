@@ -1,6 +1,5 @@
 open Torch
 open Torch_vision
-(* let guidance_scale = 7.5 *)
 
 let version = "0.0.1"
 
@@ -19,7 +18,20 @@ let image_preprocess input_image =
   Tensor.unsqueeze image ~dim:0
 ;;
 
-let run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sliced_attention_size n_steps strength seed num_samples =
+let run_img2img
+  input_image
+  prompt
+  cpu
+  clip_weights
+  unet_weights
+  vae_weights
+  sliced_attention_size
+  n_steps
+  strength
+  seed
+  num_samples
+  final_image
+  =
   let open Diffusers_ocaml in
   let open Diffusers_models in
   let open Diffusers_pipelines in
@@ -35,7 +47,7 @@ let run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sli
     in
     let _text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
     Printf.printf "Building unet";
-    let _unet =
+    let unet =
       Stable_diffusion.build_unet
         ~unet_weights
         ~device:unet_device
@@ -48,15 +60,27 @@ let run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sli
     let vae = Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let init_latent_dist = Vae.AutoEncoderKL.encode vae init_image in
     let t_start = n_steps - Int.of_float (Float.of_int n_steps *. strength) in
-    let scheduler = Ddim.DDimScheduler.make n_steps 1000 (Ddim.DDIMSchedulerConfig.default ()) in
-    for idx = 0 to num_samples do
+    let scheduler =
+      Ddim.DDimScheduler.make n_steps 1000 (Ddim.DDIMSchedulerConfig.default ())
+    in
+    for idx = 0 to num_samples - 1 do
       Torch_core.Wrapper.manual_seed (seed + idx);
       let latents = Vae.DiagonalGaussianDistribution.sample init_latent_dist in
       let latents = Tensor.(mul_scalar latents (Scalar.f 0.18215)) in
       let latents = Tensor.to_device ~device:unet_device latents in
-      let latents = Ddim.DDimScheduler.add_noise scheduler latents scheduler.timesteps.(t_start) in
-      let _latents = ref latents in
-      ()                        (* Resume here *)
+      let latents =
+        Ddim.DDimScheduler.add_noise scheduler latents scheduler.timesteps.(t_start)
+      in
+      let latents = ref latents in
+      for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
+        let timestep = scheduler.timesteps.(timestep_index) in
+        if timestep_index < t_start
+        then ()
+        else (
+          Printf.printf "Timestep %d/%d\n" timestep_index n_steps;
+          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler)
+      done;
+      Utils.build_image idx num_samples vae_device vae !latents final_image
     done;
     ())
 ;;
@@ -68,12 +92,11 @@ let img2img
   clip_weights
   vae_weights
   unet_weights
-
   sliced_attention_size
   n_steps
   seed
   num_samples
-  _final_image
+  final_image
   strength
   =
   let prompt =
@@ -86,11 +109,24 @@ let img2img
   let n_steps = Option.value n_steps ~default:30 in
   let seed = Option.value seed ~default:32 in
   let num_samples = Option.value num_samples ~default:1 in
-  let _final_image = Option.value ~default:"sd_final.png" in
+  let final_image = Option.value final_image ~default:"sd_final.png" in
   let strength = Option.value strength ~default:0.8 in
   if strength < 0. || strength > 1.
   then raise (InvalidStrength "value must be between 0 and 1")
-  else run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sliced_attention_size n_steps strength seed num_samples
+  else
+    run_img2img
+      input_image
+      prompt
+      cpu
+      clip_weights
+      unet_weights
+      vae_weights
+      sliced_attention_size
+      n_steps
+      strength
+      seed
+      num_samples
+      final_image
 ;;
 
 (* let prompt = Option.value prompt ~default:"A fantasy landscape, trending on artstation" in *)

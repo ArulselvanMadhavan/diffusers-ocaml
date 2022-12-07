@@ -5,36 +5,6 @@ let height = 512
 let width = 512
 let guidance_scale = 7.5
 
-let build_image idx num_samples vae_device vae_weights latents final_image =
-  let open Diffusers_models in
-  Printf.printf "Generating final for sample %d/%d\n" (idx + 1) num_samples;
-  let latents = Tensor.to_device ~device:vae_device latents in
-  Printf.printf "Building VAE\n";
-  let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
-  let image =
-    Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
-  in
-  let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
-  let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
-  let image = Tensor.to_device image ~device:Device.Cpu in
-  let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
-  let image = Tensor.to_kind image ~kind:(T Uint8) in
-  let final_image =
-    if num_samples > 1
-    then (
-      match Base.String.rsplit2 ~on:'.' final_image with
-      | None -> Printf.sprintf "%s.%s.png" final_image (Int.to_string (idx + 1))
-      | Some (filename_no_extension, extension) ->
-        Printf.sprintf
-          "%s.%s.%s"
-          filename_no_extension
-          (Int.to_string (idx + 1))
-          extension)
-    else final_image
-  in
-  Torch_vision.Image.write_image image ~filename:final_image
-;;
-
 let run_stable_diffusion
   prompt
   cpu
@@ -115,7 +85,9 @@ let run_stable_diffusion
                timestep
                !latents
       done;
-      build_image idx num_samples vae_device vae_weights !latents final_image
+      Printf.printf "Building VAE\n";
+      let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+      Utils.build_image idx num_samples vae_device vae !latents final_image
     done)
 ;;
 
