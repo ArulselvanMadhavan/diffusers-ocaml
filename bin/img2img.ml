@@ -40,7 +40,6 @@ let run_img2img
   Printf.printf "Cuda available:%b\n" (Cuda.is_available ());
   let clip_device = Utils.cpu_or_cuda cpu "clip" in
   let unet_device = Utils.cpu_or_cuda cpu "unet" in
-  List.iter (Printf.printf "Device:%s\n") cpu;
   let tokens, uncond_tokens = Utils.gen_tokens prompt clip_device in
   Tensor.no_grad (fun _ ->
     Printf.printf "Building Clip Transformer";
@@ -240,7 +239,7 @@ let () =
         $ num_samples
         $ final_image
         $ strength)
-    , Cmd.info "img2img" ~sdocs:"" ~doc ~man )
+    , Cmd.info "generate" ~sdocs:"" ~doc ~man )
   in
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in
   let info =
