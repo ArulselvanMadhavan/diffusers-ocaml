@@ -45,6 +45,11 @@ sys     0m11.518s
 dune exec img2img -- img2img media/in_img2img.jpg
 #+end_src
 *** Sample generated image
+- Input image
+#+CAPTION: img2img
+#+NAME:   fig:in_img2img.png
+[[./media/in_img2img.png]]
+- Output image
 #+CAPTION: img2img
 #+NAME:   fig:out_img2img.png
 [[./media/out_img2img.png]]
