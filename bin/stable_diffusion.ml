@@ -6,18 +6,6 @@ let height = 512
 let width = 512
 let guidance_scale = 7.5
 
-(* let log_device d = *)
-(*   Base.Fn.(d |> Device.is_cuda |> Printf.sprintf "is_cuda:%b\n" |> Lwt_log.debug) *)
-
-(* let set_logger () = *)
-(*   Lwt_log.default *)
-(*     := Lwt_log.channel *)
-(*          ~template:"$(date).$(milliseconds) [$(level)] $(message)" *)
-(*          ~close_mode:`Keep *)
-(*          ~channel:Lwt_io.stdout *)
-(*          (); *)
-(*   Lwt_log.add_rule "*" Lwt_log.Info *)
-
 let array_to_tensor tokens device =
   let tokens =
     Bigarray.Array1.of_array Bigarray.Int Bigarray.C_layout (Array.of_list tokens)
@@ -151,7 +139,7 @@ let run_stable_diffusion
                scheduler
                noise_pred
                timestep
-               !latents;
+               !latents
       done;
       build_image idx num_samples vae_device vae_weights !latents final_image
     done)

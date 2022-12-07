@@ -1,6 +1,6 @@
 (executables
- (public_names diffusers_ocaml stable_diffusion)
- (names main stable_diffusion)
+ (public_names diffusers_ocaml stable_diffusion img2img)
+ (names main stable_diffusion img2img)
  (libraries
   diffusers_ocaml
   diffusers_models
