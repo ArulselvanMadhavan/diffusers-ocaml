@@ -88,4 +88,13 @@ module DDimScheduler = struct
     then Tensor.(prev_sample + mul_scalar (randn_like prev_sample) (Scalar.f std_dev_t))
     else prev_sample
   ;;
+
+  let add_noise t original timestep =
+    let timestep = if timestep >= (Bigarray.Genarray.dims t.alphas_cumprod).(0) then timestep - 1 else timestep in
+    let noise = Tensor.randn_like original in
+    let alpha_timestep = (Bigarray.Genarray.get t.alphas_cumprod [|timestep|]) in
+    let sqrt_alpha_prod = Float.sqrt alpha_timestep in
+    let sqrt_one_minus_alpha_prod = Float.sqrt (1. -. alpha_timestep) in
+    let original = Tensor.(mul_scalar original (Scalar.f sqrt_alpha_prod)) in
+    Tensor.(original + mul_scalar noise (Scalar.f sqrt_one_minus_alpha_prod))
 end

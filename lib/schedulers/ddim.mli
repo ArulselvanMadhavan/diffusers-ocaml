@@ -26,4 +26,5 @@ module DDimScheduler : sig
 
   val make : int -> int -> DDIMSchedulerConfig.t -> t
   val step : t -> Tensor.t -> int -> Tensor.t -> Tensor.t
+  val add_noise : t -> Tensor.t -> int -> Tensor.t
 end

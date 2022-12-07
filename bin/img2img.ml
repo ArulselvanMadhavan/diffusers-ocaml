@@ -19,8 +19,11 @@ let image_preprocess input_image =
   Tensor.unsqueeze image ~dim:0
 ;;
 
-let run_img2img input_image prompt cpu clip_weights unet_weights sliced_attention_size =
+let run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sliced_attention_size n_steps strength seed num_samples =
   let open Diffusers_ocaml in
+  let open Diffusers_models in
+  let open Diffusers_pipelines in
+  let open Diffusers_schedulers in
   Printf.printf "Cuda available:%b\n" (Cuda.is_available ());
   let clip_device = Utils.cpu_or_cuda cpu "clip" in
   let unet_device = Utils.cpu_or_cuda cpu "unet" in
@@ -33,13 +36,28 @@ let run_img2img input_image prompt cpu clip_weights unet_weights sliced_attentio
     let _text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
     Printf.printf "Building unet";
     let _unet =
-      Diffusers_pipelines.Stable_diffusion.build_unet
+      Stable_diffusion.build_unet
         ~unet_weights
         ~device:unet_device
         4
         sliced_attention_size
     in
-    let _init_image = image_preprocess input_image in
+    let init_image = image_preprocess input_image in
+    Printf.printf "Building vae";
+    let vae_device = Utils.cpu_or_cuda cpu "vae" in
+    let vae = Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+    let init_latent_dist = Vae.AutoEncoderKL.encode vae init_image in
+    let t_start = n_steps - Int.of_float (Float.of_int n_steps *. strength) in
+    let scheduler = Ddim.DDimScheduler.make n_steps 1000 (Ddim.DDIMSchedulerConfig.default ()) in
+    for idx = 0 to num_samples do
+      Torch_core.Wrapper.manual_seed (seed + idx);
+      let latents = Vae.DiagonalGaussianDistribution.sample init_latent_dist in
+      let latents = Tensor.(mul_scalar latents (Scalar.f 0.18215)) in
+      let latents = Tensor.to_device ~device:unet_device latents in
+      let latents = Ddim.DDimScheduler.add_noise scheduler latents scheduler.timesteps.(t_start) in
+      let _latents = ref latents in
+      ()                        (* Resume here *)
+    done;
     ())
 ;;
 
@@ -48,12 +66,13 @@ let img2img
   prompt
   cpu
   clip_weights
-  _vae_weights
+  vae_weights
   unet_weights
+
   sliced_attention_size
-  _n_steps
-  _seed
-  _num_samples
+  n_steps
+  seed
+  num_samples
   _final_image
   strength
   =
@@ -63,15 +82,15 @@ let img2img
   let cpu = Option.value cpu ~default:[ "clip"; "unet" ] in
   let unet_weights = Option.value unet_weights ~default:"data/unet.ot" in
   let clip_weights = Option.value clip_weights ~default:"data/pytorch_model.ot" in
-  let _vae_weights = Option.value ~default:"data/vae.ot" in
-  let _n_steps = Option.value ~default:30 in
-  let _seed = Option.value ~default:32 in
-  let _num_samples = Option.value ~default:1 in
+  let vae_weights = Option.value vae_weights ~default:"data/vae.ot" in
+  let n_steps = Option.value n_steps ~default:30 in
+  let seed = Option.value seed ~default:32 in
+  let num_samples = Option.value num_samples ~default:1 in
   let _final_image = Option.value ~default:"sd_final.png" in
   let strength = Option.value strength ~default:0.8 in
   if strength < 0. || strength > 1.
   then raise (InvalidStrength "value must be between 0 and 1")
-  else run_img2img input_image prompt cpu clip_weights unet_weights sliced_attention_size
+  else run_img2img input_image prompt cpu clip_weights unet_weights vae_weights sliced_attention_size n_steps strength seed num_samples
 ;;
 
 (* let prompt = Option.value prompt ~default:"A fantasy landscape, trending on artstation" in *)
