@@ -24,6 +24,14 @@ let img2img
   let _prompt =
     Option.value prompt ~default:"A fantasy landscape, trending on artstation."
   in
+  let _cpu = Option.value ~default:[ "clip"; "unet" ] in
+  let _unet_weights = Option.value ~default:"data/unet.ot" in
+  let _clip_weights = Option.value ~default:"data/pytorch_model.ot" in
+  let _vae_weights = Option.value ~default:"data/vae.ot" in
+  let _n_steps = Option.value ~default:30 in
+  let _seed = Option.value ~default:32 in
+  let _num_samples = Option.value ~default:1 in
+  let _final_image = Option.value ~default:"sd_final.png" in
   let strength = Option.value strength ~default:0.8 in
   if strength < 0. || strength > 1.
   then raise (InvalidStrength "value must be between 0 and 1")
