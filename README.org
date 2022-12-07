@@ -39,3 +39,12 @@ real    0m25.110s
 user    0m39.271s
 sys     0m11.518s
 #+end_src
+** Img2Img
+*** How to run?
+#+begin_src bash
+dune exec img2img -- img2img media/in_img2img.jpg
+#+end_src
+*** Sample generated image
+#+CAPTION: img2img
+#+NAME:   fig:out_img2img.png
+[[./media/out_img2img.png]]

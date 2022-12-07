@@ -1,3 +1,8 @@
 (library
  (name diffusers_ocaml)
- (libraries torch))
+ (libraries
+  torch
+  diffusers_transformers
+  diffusers_pipelines
+  diffusers_schedulers
+  torch.vision))

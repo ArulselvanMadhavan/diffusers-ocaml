@@ -1,57 +1,8 @@
 open Torch
-open Diffusers_transformers
 module DPipelines = Diffusers_pipelines
 
 let height = 512
 let width = 512
-let guidance_scale = 7.5
-
-let array_to_tensor tokens device =
-  let tokens =
-    Bigarray.Array1.of_array Bigarray.Int Bigarray.C_layout (Array.of_list tokens)
-  in
-  let tokens = Tensor.of_bigarray ~device (Bigarray.genarray_of_array1 tokens) in
-  Tensor.view tokens ~size:[ 1; -1 ]
-;;
-
-let gen_tokens prompt clip_device =
-  let tokenizer = Clip.Tokenizer.make "data/bpe_simple_vocab_16e6.txt" in
-  let tokens = Clip.Tokenizer.encode tokenizer prompt in
-  let tokens = array_to_tensor tokens clip_device in
-  let uncond_tokens = Clip.Tokenizer.encode tokenizer "" in
-  let uncond_tokens = array_to_tensor uncond_tokens clip_device in
-  tokens, uncond_tokens
-;;
-
-let build_image idx num_samples vae_device vae_weights latents final_image =
-  let open Diffusers_models in
-  Printf.printf "Generating final for sample %d/%d\n" (idx + 1) num_samples;
-  let latents = Tensor.to_device ~device:vae_device latents in
-  Printf.printf "Building VAE\n";
-  let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
-  let image =
-    Vae.AutoEncoderKL.decode vae (Tensor.div_scalar latents (Scalar.f 0.18215))
-  in
-  let image = Tensor.(add_scalar (div_scalar image (Scalar.f 2.)) (Scalar.f 0.5)) in
-  let image = Tensor.clamp ~min:(Scalar.f 0.) ~max:(Scalar.f 1.) image in
-  let image = Tensor.to_device image ~device:Device.Cpu in
-  let image = Tensor.(mul_scalar image (Scalar.f 255.)) in
-  let image = Tensor.to_kind image ~kind:(T Uint8) in
-  let final_image =
-    if num_samples > 1
-    then (
-      match Base.String.rsplit2 ~on:'.' final_image with
-      | None -> Printf.sprintf "%s.%s.png" final_image (Int.to_string (idx + 1))
-      | Some (filename_no_extension, extension) ->
-        Printf.sprintf
-          "%s.%s.%s"
-          filename_no_extension
-          (Int.to_string (idx + 1))
-          extension)
-    else final_image
-  in
-  Torch_vision.Image.write_image image ~filename:final_image
-;;
 
 let run_stable_diffusion
   prompt
@@ -64,21 +15,15 @@ let run_stable_diffusion
   seed
   num_samples
   =
-  let open Diffusers_models in
+  let open Diffusers_ocaml in
   (* set_logger (); *)
   let n_steps = Option.value n_steps ~default:30 in
   let num_samples = Option.value num_samples ~default:1 in
   let seed = Option.value seed ~default:32 in
   let final_image = "sd_final.png" in
-  let cuda_device = Torch.Device.cuda_if_available () in
-  let cpu_or_cuda name =
-    if Base.List.exists cpu ~f:(fun c -> c = "all" || c = name)
-    then Device.Cpu
-    else cuda_device
-  in
-  let clip_device = cpu_or_cuda "clip" in
-  let vae_device = cpu_or_cuda "vae" in
-  let unet_device = cpu_or_cuda "unet" in
+  let clip_device = Utils.cpu_or_cuda cpu "clip" in
+  let vae_device = Utils.cpu_or_cuda cpu "vae" in
+  let unet_device = Utils.cpu_or_cuda cpu "unet" in
   List.iter
     (fun d -> Printf.printf "%b\n" (Device.is_cuda d))
     [ clip_device; vae_device; unet_device ];
@@ -88,15 +33,12 @@ let run_stable_diffusion
       1000
       (Diffusers_schedulers.Ddim.DDIMSchedulerConfig.default ())
   in
-  let tokens, uncond_tokens = gen_tokens prompt clip_device in
+  let tokens, uncond_tokens = Utils.gen_tokens prompt clip_device in
   Torch.Tensor.no_grad (fun () ->
     Printf.printf "Building clip transformer\n";
-    let text_model =
-      DPipelines.Stable_diffusion.build_clip_transformer ~clip_weights ~device:clip_device
+    let text_embeddings =
+      Utils.build_text_embeddings clip_weights clip_device tokens uncond_tokens
     in
-    let text_embeddings = Clip.ClipTextTransformer.forward text_model tokens in
-    let uncond_embeddings = Clip.ClipTextTransformer.forward text_model uncond_tokens in
-    let text_embeddings = Tensor.cat [ uncond_embeddings; text_embeddings ] ~dim:0 in
     let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
     Printf.printf "Building unet\n";
     let unet =
@@ -118,30 +60,13 @@ let run_stable_diffusion
       let latents = ref latents in
       for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
         let timestep = scheduler.timesteps.(timestep_index) in
-        Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
+        Printf.printf "Timestep %d/%d|%d|%s\n" timestep_index n_steps timestep (Tensor.shape_str !latents);
         Stdio.Out_channel.flush stdout;
-        let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
-        let noise_pred =
-          Unet_2d.UNet2DConditionModel.forward
-            unet
-            latent_model_input
-            (Float.of_int timestep)
-            text_embeddings
-        in
-        let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-        let noise_pred =
-          Tensor.(
-            noise_pred.(0)
-            + mul_scalar (noise_pred.(1) - noise_pred.(0)) (Scalar.f guidance_scale))
-        in
-        latents
-          := Diffusers_schedulers.Ddim.DDimScheduler.step
-               scheduler
-               noise_pred
-               timestep
-               !latents
+        latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
       done;
-      build_image idx num_samples vae_device vae_weights !latents final_image
+      Printf.printf "Building VAE\n";
+      let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
+      Utils.build_image idx num_samples vae_device vae !latents final_image
     done)
 ;;
 
