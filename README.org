@@ -39,7 +39,7 @@ real    0m25.110s
 user    0m39.271s
 sys     0m11.518s
 #+end_src
-** Img2Img
+** Image to Image generation
 *** How to run?
 #+begin_src bash
 dune exec img2img -- img2img media/in_img2img.jpg
