@@ -3,7 +3,6 @@ module DPipelines = Diffusers_pipelines
 
 let height = 512
 let width = 512
-let guidance_scale = 7.5
 
 let run_stable_diffusion
   prompt
@@ -16,7 +15,6 @@ let run_stable_diffusion
   seed
   num_samples
   =
-  let open Diffusers_models in
   let open Diffusers_ocaml in
   (* set_logger (); *)
   let n_steps = Option.value n_steps ~default:30 in
@@ -62,28 +60,9 @@ let run_stable_diffusion
       let latents = ref latents in
       for timestep_index = 0 to Array.length scheduler.timesteps - 1 do
         let timestep = scheduler.timesteps.(timestep_index) in
-        Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
+        Printf.printf "Timestep %d/%d|%d|%s\n" timestep_index n_steps timestep (Tensor.shape_str !latents);
         Stdio.Out_channel.flush stdout;
-        let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
-        let noise_pred =
-          Unet_2d.UNet2DConditionModel.forward
-            unet
-            latent_model_input
-            (Float.of_int timestep)
-            text_embeddings
-        in
-        let noise_pred = Array.of_list (Tensor.chunk noise_pred ~chunks:2 ~dim:0) in
-        let noise_pred =
-          Tensor.(
-            noise_pred.(0)
-            + mul_scalar (noise_pred.(1) - noise_pred.(0)) (Scalar.f guidance_scale))
-        in
-        latents
-          := Diffusers_schedulers.Ddim.DDimScheduler.step
-               scheduler
-               noise_pred
-               timestep
-               !latents
+        latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
       done;
       Printf.printf "Building VAE\n";
       let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in

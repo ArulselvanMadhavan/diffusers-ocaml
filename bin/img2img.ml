@@ -8,6 +8,7 @@ exception InvalidStrength of string
 let image_preprocess input_image =
   let image = Image.load_image input_image in
   let image = Base.Or_error.ok_exn image in
+  let image = Tensor.squeeze image in
   let _, height, width = Tensor.shape3_exn image in
   let height = height - Base.Int.(height % 32) in
   let width = width - Base.Int.(width % 32) in
@@ -15,7 +16,7 @@ let image_preprocess input_image =
   let image = Tensor.(div_scalar image (Scalar.f 255.)) in
   let image = Tensor.(mul_scalar image (Scalar.f 2.)) in
   let image = Tensor.(add_scalar image (Scalar.i (-1))) in
-  Tensor.unsqueeze image ~dim:0
+    image
 ;;
 
 let run_img2img
@@ -39,13 +40,14 @@ let run_img2img
   Printf.printf "Cuda available:%b\n" (Cuda.is_available ());
   let clip_device = Utils.cpu_or_cuda cpu "clip" in
   let unet_device = Utils.cpu_or_cuda cpu "unet" in
+  List.iter (Printf.printf "Device:%s\n") cpu;
   let tokens, uncond_tokens = Utils.gen_tokens prompt clip_device in
   Tensor.no_grad (fun _ ->
     Printf.printf "Building Clip Transformer";
     let text_embeddings =
       Utils.build_text_embeddings clip_weights clip_device tokens uncond_tokens
     in
-    let _text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
+    let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
     Printf.printf "Building unet";
     let unet =
       Stable_diffusion.build_unet
@@ -77,8 +79,10 @@ let run_img2img
         if timestep_index < t_start
         then ()
         else (
-          Printf.printf "Timestep %d/%d\n" timestep_index n_steps;
-          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler)
+          Printf.printf "Timestep %d/%d|%d|%s\n" timestep_index n_steps timestep (Tensor.shape_str !latents);
+          Stdio.Out_channel.flush stdout;
+          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
+        );
       done;
       Utils.build_image idx num_samples vae_device vae !latents final_image
     done;
@@ -102,7 +106,7 @@ let img2img
   let prompt =
     Option.value prompt ~default:"A fantasy landscape, trending on artstation."
   in
-  let cpu = Option.value cpu ~default:[ "clip"; "unet" ] in
+  let cpu = Option.value cpu ~default:[ "vae" ] in
   let unet_weights = Option.value unet_weights ~default:"data/unet.ot" in
   let clip_weights = Option.value clip_weights ~default:"data/pytorch_model.ot" in
   let vae_weights = Option.value vae_weights ~default:"data/vae.ot" in
@@ -129,15 +133,11 @@ let img2img
       final_image
 ;;
 
-(* let prompt = Option.value prompt ~default:"A fantasy landscape, trending on artstation" in *)
-
 let () =
   let open Cmdliner in
   let input_image =
     Arg.(
-      required
-      & pos 0 (some string) None
-      & info [ "input_image" ] ~docv:"FILE" ~doc:"Input image file")
+      required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc:"Input image file")
   in
   let prompt =
     Arg.(
@@ -151,9 +151,9 @@ let () =
   let cpu =
     Arg.(
       value
-      & opt (some (list string)) (Some [ "all" ])
+      & opt (some (list string)) None
       & info
-          []
+          [ "cpu" ]
           ~docv:"CPU"
           ~doc:"components to run on cpu. supported:all, clip, vae, unet")
   in
@@ -161,19 +161,19 @@ let () =
     Arg.(
       value
       & opt (some string) None
-      & info [] ~docv:"CLIP_WEIGHTS_FILE" ~doc:"clip weights in ot format")
+      & info [ "clip_weights" ] ~docv:"CLIP_WEIGHTS_FILE" ~doc:"clip weights in ot format")
   in
   let vae_weights =
     Arg.(
       value
       & opt (some string) None
-      & info [] ~docv:"VAE_WEIGHTS_FILE" ~doc:"vae weights in ot format")
+      & info [ "vae_weights" ] ~docv:"VAE_WEIGHTS_FILE" ~doc:"vae weights in ot format")
   in
   let unet_weights =
     Arg.(
       value
       & opt (some string) None
-      & info [] ~docv:"UNET_WEIGHTS_FILE" ~doc:"vae weights in ot format")
+      & info [ "unet_weights" ] ~docv:"UNET_WEIGHTS_FILE" ~doc:"vae weights in ot format")
   in
   let sliced_attention_size =
     Arg.(
@@ -203,7 +203,10 @@ let () =
       & info [ "num_samples" ] ~docv:"NUM_SAMPLES" ~doc:"Number of samples to generate")
   in
   let final_image =
-    Arg.(value & opt (some string) None & info [] ~docv:"FINAL_IMAGE" ~doc:"final image")
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "final_image" ] ~docv:"FINAL_IMAGE" ~doc:"final image")
   in
   let strength =
     Arg.(
@@ -238,7 +241,7 @@ let () =
   let default_cmd = Term.(ret (const (`Help (`Pager, None)))) in
   let info =
     let doc = "Stable Diffusion: Image to Image" in
-    Cmd.info "Stable diffusion" ~version ~sdocs:"" ~doc
+    Cmd.info "Stable diffusion: Image to Image" ~version ~sdocs:"" ~doc
   in
   let cmds = [ cmd ] |> List.map (fun (cmd, info) -> Cmd.v info cmd) in
   let main_cmd = Cmd.group info ~default:default_cmd cmds in
