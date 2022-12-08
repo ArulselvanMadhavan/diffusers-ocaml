@@ -383,7 +383,7 @@ module Tokenizer = struct
     let s = Base.String.lowercase s in
     let matches = Re2.find_all t.re s in
     let matches =
-      Option.fold (Core_kernel.Or_error.ok matches) ~none:[] ~some:Base.Fn.id
+      Option.fold (Core.Or_error.ok matches) ~none:[] ~some:Base.Fn.id
     in
     let bpe_tokens = Base.List.map matches ~f:(bpe t) in
     let bpe_tokens = List.flatten bpe_tokens in
