@@ -29,11 +29,10 @@ This work is a port of the [[https://github.com/LaurentMazare/diffusers-rs/][dif
 #+CAPTION: rusty robot holding a torch
 #+NAME:   fig:rusty_robot.png
 [[./media/sd_final.2.png]]
-*** Performance
-On 8GB Nvidia GeForce GTX 1070 Mobile GPU, it takes about 27 seconds to
-generate an image. Measurements were done on a 12 CPU Intel(R)
+*** Performance on 8GB Nvidia GeForce GTX 1070 Mobile GPU
+It takes about 27 seconds to generate an image. Measurements were done on a 12 CPU Intel(R)
 Core(TM) i7-8700K CPU @ 3.70GHz. Running all the steps in CPU takes
-little more than three minutes.
+little more than three minutes. I place vae on CPU; unet and clip on GPU
 #+begin_src bash
 real    0m25.110s
 user    0m39.271s
@@ -53,5 +52,35 @@ dune exec img2img -- img2img media/in_img2img.jpg
 #+CAPTION: img2img
 #+NAME:   fig:out_img2img.png
 [[./media/out_img2img.png]]
+*** Performance on 8GB Nvidia GeForce GTX 1070 Mobile GPU
+I placed vae on CPU; unet and clip on GPU
+#+begin_src bash
+real    0m15.628s
+user    0m34.571s
+sys     0m5.833s
+#+end_src
+** Inpaint
+*** How to run?
+#+begin_src bash
+dune exec inpaint -- generate media/sd_input.png media/sd_mask.png --cpu="vae" --prompt="Face of a panda, high resolution, sitting on a park bench"
+#+end_src
+*** Sample generated image
+- Prompt: Face of a panda, high resolution, sitting on a park bench
+#+CAPTION: inpaint-input
+#+NAME:   fig:sd_input.png
+[[./media/sd_input.png]]
+#+CAPTION: inpaint-mask
+#+NAME:   fig:sd_mask.png
+[[./media/sd_mask.png]]
+#+CAPTION: inpaint-output
+#+NAME:   fig:panda.png
+[[./media/panda.png]]
+*** Performance
+I placed vae on CPU; unet and clip on GPU
+#+begin_src bash
+real    0m28.055s
+user    0m51.600s
+sys     0m13.851s
+#+end_src
 ** Note
 Only FP32 weights are supported.
