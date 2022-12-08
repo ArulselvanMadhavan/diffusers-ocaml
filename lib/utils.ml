@@ -37,13 +37,14 @@ let build_text_embeddings clip_weights clip_device tokens uncond_tokens =
 
 let guidance_scale = 7.5
 
-let update_latents gen_unet_input latents unet timestep text_embeddings scheduler =
+let update_latents latents unet timestep text_embeddings scheduler =
   let open Diffusers_models in
   let open Diffusers_schedulers in
+  let latent_model_input = Tensor.cat [ latents; latents ] ~dim:0 in
   let noise_pred =
     Unet_2d.UNet2DConditionModel.forward
       unet
-      (gen_unet_input latents)
+      latent_model_input
       (Float.of_int timestep)
       text_embeddings
   in

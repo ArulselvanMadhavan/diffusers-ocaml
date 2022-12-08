@@ -7,7 +7,6 @@ val gen_tokens : string -> Device.t -> Tensor.t * Tensor.t
 val build_text_embeddings : string -> Device.t -> Tensor.t -> Tensor.t -> Tensor.t
 
 val update_latents
-  :  (Tensor.t -> Tensor.t)
   -> Tensor.t
   -> Unet_2d.UNet2DConditionModel.t
   -> int
