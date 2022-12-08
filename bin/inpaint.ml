@@ -120,7 +120,8 @@ let run_inpaint
         in
         latents
           := Utils.update_latents
-               (gen_unet_input !latents)
+               gen_unet_input
+               !latents
                unet
                timestep
                text_embeddings

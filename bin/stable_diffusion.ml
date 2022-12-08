@@ -67,7 +67,15 @@ let run_stable_diffusion
           timestep
           (Tensor.shape_str !latents);
         Stdio.Out_channel.flush stdout;
-        latents := Utils.update_latents !latents unet timestep text_embeddings scheduler
+        let gen_unet_inputs latents = Tensor.cat [ latents; latents ] ~dim:0 in
+        latents
+          := Utils.update_latents
+               gen_unet_inputs
+               !latents
+               unet
+               timestep
+               text_embeddings
+               scheduler
       done;
       Printf.printf "Building VAE\n";
       let vae = DPipelines.Stable_diffusion.build_vae ~vae_weights ~device:vae_device in

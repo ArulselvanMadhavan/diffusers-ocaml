@@ -80,7 +80,15 @@ let run_img2img
         else (
           Printf.printf "Timestep %d/%d|%d\n" timestep_index n_steps timestep;
           Stdio.Out_channel.flush stdout;
-          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler;
+          let gen_unet_inputs latents = Tensor.cat [ latents; latents ] ~dim:0 in
+          latents
+            := Utils.update_latents
+                 gen_unet_inputs
+                 !latents
+                 unet
+                 timestep
+                 text_embeddings
+                 scheduler;
           Caml.Gc.full_major ())
       done;
       Utils.build_image idx num_samples vae_device vae !latents final_image
