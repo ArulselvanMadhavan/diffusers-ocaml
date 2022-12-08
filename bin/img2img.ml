@@ -85,7 +85,15 @@ let run_img2img
             timestep
             (Tensor.shape_str !latents);
           Stdio.Out_channel.flush stdout;
-          latents := Utils.update_latents !latents unet timestep text_embeddings scheduler)
+          let gen_unet_input latents = Tensor.cat [ latents; latents ] ~dim:0 in
+          latents
+            := Utils.update_latents
+                 gen_unet_input
+                 !latents
+                 unet
+                 timestep
+                 text_embeddings
+                 scheduler)
       done;
       Utils.build_image idx num_samples vae_device vae !latents final_image
     done;

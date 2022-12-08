@@ -7,11 +7,13 @@ let version = "0.0.1"
 let prepare_mask_and_masked_image in_img_path mask_path =
   let image = Torch_vision.Image.load_image in_img_path in
   let image = Base.Or_error.ok_exn image in
+  let image = Tensor.squeeze image in
   let image = Tensor.div_scalar image (Scalar.f 255.) in
   let image = Tensor.mul_scalar image (Scalar.f 2.) in
   let image = Tensor.add_scalar image (Scalar.f (-1.)) in
   let mask = Torch_vision.Image.load_image mask_path in
   let mask = Base.Or_error.ok_exn mask in
+  let mask = Tensor.squeeze mask in
   let mask = Tensor.mean_dim ~dim:(Some [ 0 ]) ~keepdim:true ~dtype:(T Float) mask in
   let mask = Tensor.ge mask (Scalar.f 122.5) in
   let mask = Tensor.to_dtype mask ~dtype:(T Float) ~non_blocking:true ~copy:false in
@@ -47,6 +49,9 @@ let run_inpaint
   let clip_device = Utils.cpu_or_cuda cpu "clip" in
   let vae_device = Utils.cpu_or_cuda cpu "vae" in
   let unet_device = Utils.cpu_or_cuda cpu "unet" in
+  List.iter
+    (fun d -> Printf.printf "%b\n" (Device.is_cuda d))
+    [ clip_device; vae_device; unet_device ];
   let scheduler =
     Ddim.DDimScheduler.make n_steps 1000 (Ddim.DDIMSchedulerConfig.default ())
   in
@@ -57,7 +62,8 @@ let run_inpaint
       Utils.build_text_embeddings clip_weights clip_device tokens uncond_tokens
     in
     let text_embeddings = Tensor.to_device ~device:unet_device text_embeddings in
-    Printf.printf "Building unet";
+    Printf.printf "Building unet|%s\n" unet_weights;
+    Stdio.Out_channel.flush stdout;
     let unet =
       Stable_diffusion.build_unet
         ~unet_weights
@@ -68,13 +74,13 @@ let run_inpaint
     let vae = Stable_diffusion.build_vae ~vae_weights ~device:vae_device in
     let mask =
       Tensor.upsample_nearest2d
-        ~output_size:[ height / 2; width / 2 ]
+        ~output_size:[ height / 8; width / 8 ]
         ~scales_h:None
         ~scales_w:None
         mask
     in
     let mask = Tensor.cat [ mask; mask ] ~dim:0 in
-    let mask = Tensor.to_device mask ~device:vae_device in
+    let mask = Tensor.to_device mask ~device:unet_device in
     let masked_image = Tensor.to_device masked_image ~device:vae_device in
     let masked_image_dist = Vae.AutoEncoderKL.encode vae masked_image in
     let bsize = 1 in
@@ -108,13 +114,14 @@ let run_inpaint
           timestep
           (Tensor.shape_str !latents);
         Stdio.Out_channel.flush stdout;
-        let latent_model_input = Tensor.cat [ !latents; !latents ] ~dim:0 in
-        let latent_model_input =
-          Tensor.cat [ latent_model_input; mask; masked_image_latents ] ~dim:1
+        let gen_unet_input latents =
+          let latents = Tensor.cat [ latents; latents ] ~dim:0 in
+          Tensor.cat [ latents; mask; masked_image_latents ] ~dim:1
         in
         latents
           := Utils.update_latents
-               latent_model_input
+               gen_unet_input
+               !latents
                unet
                timestep
                text_embeddings
@@ -139,10 +146,12 @@ let inpaint
   final_image
   =
   let prompt =
-    Option.value prompt ~default:"A fantasy landscape, trending on artstation."
+    Option.value
+      prompt
+      ~default:"Face of a yellow cat, high resolution, sitting on a park bench"
   in
   let cpu = Option.value cpu ~default:[ "vae" ] in
-  let unet_weights = Option.value unet_weights ~default:"data/unet.ot" in
+  let unet_weights = Option.value unet_weights ~default:"data/unet-inpaint.ot" in
   let clip_weights = Option.value clip_weights ~default:"data/pytorch_model.ot" in
   let vae_weights = Option.value vae_weights ~default:"data/vae.ot" in
   let n_steps = Option.value n_steps ~default:30 in

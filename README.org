@@ -53,3 +53,5 @@ dune exec img2img -- img2img media/in_img2img.jpg
 #+CAPTION: img2img
 #+NAME:   fig:out_img2img.png
 [[./media/out_img2img.png]]
+** Note
+Only FP32 weights are supported.
